@@ -15,16 +15,18 @@ class StatGenPage {
 			BrewUtil2.pInit(),
 		]);
 		await ExcludeUtil.pInitialise();
-		const [races, backgrounds, feats] = await Promise.all([
+		const [races, backgrounds, feats, classes] = await Promise.all([
 			await this._pLoadRaces(),
 			await this._pLoadBackgrounds(),
 			await this._pLoadFeats(),
+			await this._pLoadClasses(),
 		]);
 
 		this._statGenUi = new StatGenUi({
 			races,
 			backgrounds,
 			feats,
+			classes,
 			tabMetasAdditional: this._getAdditionalTabMetas(),
 		});
 		await this._statGenUi.pInit();
@@ -163,6 +165,34 @@ class StatGenPage {
 			.filter(it => {
 				const hash = UrlUtil.URL_TO_HASH_BUILDER[UrlUtil.PG_FEATS](it);
 				return !ExcludeUtil.isExcluded(hash, "feat", it.source);
+			});
+	}
+
+	async _pLoadClasses () {
+		const [classes, subclasses] = await Promise.all([
+			DataLoader.pCacheAndGetAllSite("class"),
+			DataLoader.pCacheAndGetAllSite("subclass"),
+		]);
+
+		const clsLookup = new Map();
+		classes.forEach(cls => clsLookup.set(`${cls.name.toLowerCase()}|${(cls.source || "").toLowerCase()}`, cls));
+
+		subclasses.forEach(sc => {
+			if (!sc.className || !sc.classSource) return;
+			const cls = clsLookup.get(`${sc.className.toLowerCase()}|${sc.classSource.toLowerCase()}`);
+			if (!cls) return;
+
+			cls.subclasses = cls.subclasses || [];
+			if (!cls.subclasses.some(existing => existing === sc || (existing.name === sc.name && (existing.source || "") === (sc.source || "")))) {
+				cls.subclasses.push(sc);
+			}
+		});
+
+		return classes
+			.filter(cls => cls.edition !== "one")
+			.filter(cls => {
+				const hash = UrlUtil.URL_TO_HASH_BUILDER[UrlUtil.PG_CLASSES](cls);
+				return !ExcludeUtil.isExcluded(hash, "class", cls.source);
 			});
 	}
 

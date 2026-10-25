@@ -54,6 +54,7 @@ export class StatGenUi extends BaseComponent {
 		this._races = opts.races;
 		this._backgrounds = opts.backgrounds;
 		this._feats = opts.feats;
+		this._classes = opts.classes || [];
 		this._tabMetasAdditional = opts.tabMetasAdditional;
 		this._isCharacterMode = opts.isCharacterMode;
 		this._isFvttMode = opts.isFvttMode;
@@ -146,6 +147,14 @@ export class StatGenUi extends BaseComponent {
 	get ixBackground () { return this._state.common_ixBackground; }
 	set ixBackground (ixBackground) { this._state.common_ixBackground = ixBackground; }
 
+	addHookIxClass (hook) { this._addHookBase("common_ixClass", hook); }
+	get ixClass () { return this._state.common_ixClass; }
+	set ixClass (ixClass) { this._state.common_ixClass = ixClass; }
+
+	addHookIxSubclass (hook) { this._addHookBase("common_ixSubclass", hook); }
+	get ixSubclass () { return this._state.common_ixSubclass; }
+	set ixSubclass (ixSubclass) { this._state.common_ixSubclass = ixSubclass; }
+
 	addCustomFeat () { this._state.common_cntFeatsCustom = Math.min(MAX_CUSTOM_FEATS, (this._state.common_cntFeatsCustom || 0) + 1); }
 	setCntCustomFeats (val) { this._state.common_cntFeatsCustom = Math.min(MAX_CUSTOM_FEATS, val || 0); }
 	// endregion
@@ -160,6 +169,8 @@ export class StatGenUi extends BaseComponent {
 	proxyAssignSimple (hookProp, toObj, isOverwrite) { return this._proxyAssignSimple(hookProp, toObj, isOverwrite); }
 	get race () { return this._races[this._state.common_ixRace]; }
 	get background () { return this._backgrounds[this._state.common_ixBackground]; }
+	get klass () { return this._classes[this._state.common_ixClass]; }
+	get subclass () { const cls = this.klass; return cls?.subclasses?.[this._state.common_ixSubclass] || null; }
 	get isLevelUp () { return this._isLevelUp; }
 	isSettingStateFromOverwrite () { return this._isSettingStateFromOverwrite; }
 	// endregion
@@ -903,6 +914,8 @@ export class StatGenUi extends BaseComponent {
 			hrPreview: hrPreviewBackground,
 		} = this._renderLevelOneBackground.render();
 
+		const {stgSel: stgClassSel, dispInfo: dispClassInfo} = this._render_getClassSection();
+
 		const wrpAsi = this._render_getWrpAsi();
 
 		stgNone = veT`<div class="ve-flex-col ve-w-100 ve-h-100">
@@ -956,6 +969,7 @@ export class StatGenUi extends BaseComponent {
 
 					${stgBackgroundSel}
 					${stgRaceSel}
+					${stgClassSel}
 				</div>
 
 				${vrPbCustom}
@@ -974,6 +988,8 @@ export class StatGenUi extends BaseComponent {
 			${hrPreviewRaceTashas}
 			${dispTashas}
 
+			${dispClassInfo}
+
 			${wrpAsi}
 		</div>`;
 
@@ -982,6 +998,83 @@ export class StatGenUi extends BaseComponent {
 		wrpTab
 			.vee.appends(stgMain)
 			.vee.appends(stgNone);
+	}
+
+	_render_getClassSection () {
+		const {wrp: selClass} = ComponentUiUtil.getSelSearchable(
+			this,
+			"common_ixClass",
+			{
+				values: this._classes.map((_, i) => i),
+				isAllowNull: true,
+				fnDisplay: ix => {
+					const cls = this._classes[ix];
+					if (!cls) return "(None)";
+					return `${cls.name}${cls.source !== Parser.SRC_PHB ? ` [${Parser.sourceJsonToAbv(cls.source)}]` : ""}`;
+				},
+				asMeta: true,
+			},
+		);
+
+		const selSubclass = veT`<select class="ve-form-control form-control--minimal"></select>`
+			.vee.onn("change", () => {
+				const ix = Number(selSubclass.vee.val());
+				this._state.common_ixSubclass = ~ix ? ix : null;
+			});
+
+		const hkSubclassOptions = () => {
+			selSubclass.vee.empty();
+			veE({tag: "option", value: -1, txt: "\u2014"}).vee.appendTo(selSubclass);
+
+			const cls = this.klass;
+			(cls?.subclasses || []).forEach((sc, ix) => {
+				veE({tag: "option", value: ix, txt: sc.name}).vee.appendTo(selSubclass);
+			});
+
+			const ix = this._state.common_ixSubclass == null ? -1 : this._state.common_ixSubclass;
+			selSubclass.vee.val(`${ix}`);
+		};
+
+		this._addHookBase("common_ixClass", (prop) => {
+			if (prop == null || this.isSettingStateFromOverwrite()) return;
+			if (this._state.common_ixSubclass != null) this._state.common_ixSubclass = null;
+		});
+		this._addHookBase("common_ixClass", hkSubclassOptions);
+		this._addHookBase("common_ixSubclass", hkSubclassOptions);
+		hkSubclassOptions();
+
+		const dispClassInfo = veT`<div class="ve-flex-col ve-mb-2"></div>`;
+		const hkClassInfo = () => {
+			const cls = this.klass;
+			if (!cls) {
+				dispClassInfo.vee.html("");
+				return;
+			}
+
+			const hd = cls.hd ? `${cls.hd.number}d${cls.hd.faces}` : "?";
+			const saves = (cls.proficiency || []).map(ab => Parser.attAbvToFull(ab)).join(", ");
+			const caster = cls.spellcastingAbility ? `Lancia magie (${Parser.attAbvToFull(cls.spellcastingAbility)})` : "Non lancia magie";
+			const sc = this.subclass;
+
+			dispClassInfo.vee.html(
+				`<div class="ve-mb-1"><b>${cls.name}</b>${sc ? ` / <b>${sc.name}</b>` : ""}${cls.source !== Parser.SRC_PHB ? ` <span class="ve-muted">[${Parser.sourceJsonToAbv(cls.source)}]</span>` : ""}</div>` +
+				`<div class="ve-small">Dado di vita: <b>${hd}</b> &middot; Salvaguardie: <b>${saves || "?"}</b> &middot; ${caster}</div>`,
+			);
+		};
+		this._addHookBase("common_ixClass", hkClassInfo);
+		this._addHookBase("common_ixSubclass", hkClassInfo);
+		hkClassInfo();
+
+		const stgClassSel = veT`<div class="ve-flex-col ve-mt-3">
+			<div class="ve-mb-1">Classe</div>
+			<div class="ve-flex-v-center ve-mb-2">${selClass}</div>
+			<div class="ve-flex-v-center ve-mb-2">
+				<div class="ve-mr-2 ve-no-wrap">Sottoclasse</div>
+				<div>${selSubclass}</div>
+			</div>
+		</div>`;
+
+		return {stgClassSel, dispClassInfo};
 	}
 
 	_renderLevelOneRace = new StatGenUiRenderLevelOneRace({parent: this});
@@ -1297,6 +1390,13 @@ export class StatGenUi extends BaseComponent {
 			propHash: "_pb_backgroundHash",
 		});
 
+		handleEntity({
+			propIxEntity: "common_ixClass",
+			page: UrlUtil.PG_CLASSES,
+			propData: "_classes",
+			propHash: "_pb_classHash",
+		});
+
 		for (let i = 0; i < (out.state.common_cntFeatsCustom || 0); ++i) {
 			const {propIxFeat, propSaveLoadFeatHash} = this.getPropsAsi(i, "custom");
 
@@ -1351,6 +1451,21 @@ export class StatGenUi extends BaseComponent {
 			propData: "_backgrounds",
 			propIxEntity: "common_ixBackground",
 		});
+
+		handleEntityHash({
+			propHash: "_pb_classHash",
+			page: UrlUtil.PG_CLASSES,
+			propData: "_classes",
+			propIxEntity: "common_ixClass",
+		});
+
+		if (saved.state?.common_ixClass != null) {
+			const maxIxSubclass = (this._classes[saved.state.common_ixClass]?.subclasses || []).length;
+			const ixSubclass = saved.state.common_ixSubclass;
+			if (ixSubclass == null || !~ixSubclass || ixSubclass >= maxIxSubclass) saved.state.common_ixSubclass = null;
+		} else {
+			saved.state.common_ixSubclass = null;
+		}
 
 		for (let i = 0; i < (saved.state.common_cntFeatsCustom || 0); ++i) {
 			const {propIxFeat, propSaveLoadFeatHash} = this.getPropsAsi(i, "custom");
@@ -1482,6 +1597,9 @@ export class StatGenUi extends BaseComponent {
 			common_isPreviewBackground: false,
 			common_ixBackground: null,
 			common_ixAbilityScoreSetBackground: 0,
+
+			common_ixClass: null,
+			common_ixSubclass: null,
 
 			common_pulseAsi: false, // Used as a general pulse for all changes in form data
 			common_cntAsi: 0,

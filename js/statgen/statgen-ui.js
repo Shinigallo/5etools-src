@@ -25,6 +25,7 @@ export class StatGenUi extends BaseComponent {
 
 	static _SPELL_CAPS_L1 = {
 		// PHB 2014, incantesimi di 1° livello noti/preparati a livello 1
+		Artificer: 2, // TCE
 		Bard: 4,
 		Cleric: 3,
 		Druid: 4,

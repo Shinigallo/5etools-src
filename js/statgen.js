@@ -220,7 +220,8 @@ class StatGenPage {
 
 		return classes
 			.filter(cls => cls.edition !== "one")
-			.filter(cls => cls.source === "PHB")
+			.filter(cls => cls.source === "PHB" || cls.source === "TCE")
+			.filter(cls => !cls.isSidekick)
 			.filter(cls => {
 				const hash = UrlUtil.URL_TO_HASH_BUILDER[UrlUtil.PG_CLASSES](cls);
 				return !ExcludeUtil.isExcluded(hash, "class", cls.source);
@@ -241,10 +242,10 @@ class StatGenPage {
 		const spells = await DataUtil.spell.pLoadAll();
 		const out = {};
 		spells
-			.filter(sp => sp.source === "PHB" && (sp.level === 0 || sp.level === 1))
+			.filter(sp => (sp.source === "PHB" || sp.source === "TCE") && (sp.level === 0 || sp.level === 1))
 			.forEach(sp => {
 				(sp.classes?.fromClassList || [])
-					.filter(c => c.source === "PHB")
+					.filter(c => c.source === "PHB" || c.source === "TCE")
 					.forEach(c => {
 						if (!out[c.name]) out[c.name] = {cantrips: [], lvl1: []};
 						out[c.name][sp.level === 0 ? "cantrips" : "lvl1"].push(sp);

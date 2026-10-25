@@ -15,11 +15,13 @@ class StatGenPage {
 			BrewUtil2.pInit(),
 		]);
 		await ExcludeUtil.pInitialise();
-		const [races, backgrounds, feats, classes] = await Promise.all([
+		const [races, backgrounds, feats, classes, skills, classSpells] = await Promise.all([
 			await this._pLoadRaces(),
 			await this._pLoadBackgrounds(),
 			await this._pLoadFeats(),
 			await this._pLoadClasses(),
+			await this._pLoadSkills(),
+			await this._pLoadClassSpells(),
 		]);
 
 		this._statGenUi = new StatGenUi({
@@ -27,6 +29,8 @@ class StatGenPage {
 			backgrounds,
 			feats,
 			classes,
+			skills,
+			classSpells,
 			tabMetasAdditional: this._getAdditionalTabMetas(),
 		});
 		await this._statGenUi.pInit();
@@ -106,6 +110,31 @@ class StatGenPage {
 							})) return;
 
 							this._statGenUi.doResetAll();
+						},
+					},
+				],
+			}),
+			new TabUiUtil.TabMeta({
+				type: "buttons",
+				buttons: [
+					{
+						html: `<span class="glyphicon glyphicon-file"></span>`,
+						title: "Copia Scheda",
+						pFnClick: async ({btn}) => {
+							await MiscUtil.pCopyTextToClipboard(this._statGenUi.getSheetText());
+							JqueryUtil.showCopiedEffect(btn);
+						},
+					},
+				],
+			}),
+			new TabUiUtil.TabMeta({
+				type: "buttons",
+				buttons: [
+					{
+						html: `<span class="glyphicon glyphicon-save"></span>`,
+						title: "Scarica Scheda (JSON)",
+						pFnClick: () => {
+							DataUtil.userDownload("scheda-personaggio", this._statGenUi.getSheetExport(), {fileType: "statgen"});
 						},
 					},
 				],
@@ -190,10 +219,42 @@ class StatGenPage {
 
 		return classes
 			.filter(cls => cls.edition !== "one")
+			.filter(cls => cls.source === "PHB")
 			.filter(cls => {
 				const hash = UrlUtil.URL_TO_HASH_BUILDER[UrlUtil.PG_CLASSES](cls);
 				return !ExcludeUtil.isExcluded(hash, "class", cls.source);
 			});
+	}
+
+	async _pLoadSkills () {
+		const {skill} = await DataUtil.loadRawJSON(`${Renderer.get().baseUrl}data/skills.json`);
+		const byKey = new Map();
+		skill.forEach(s => {
+			const key = s.name.toLowerCase();
+			if (!byKey.has(key)) byKey.set(key, s);
+		});
+		return [...byKey.values()].map(s => ({key: s.name.toLowerCase(), name: s.name, ability: s.ability}));
+	}
+
+	async _pLoadClassSpells () {
+		const spells = await DataUtil.spell.pLoadAll();
+		const out = {};
+		spells
+			.filter(sp => sp.source === "PHB" && (sp.level === 0 || sp.level === 1))
+			.forEach(sp => {
+				(sp.classes?.fromClassList || [])
+					.filter(c => c.source === "PHB")
+					.forEach(c => {
+						if (!out[c.name]) out[c.name] = {cantrips: [], lvl1: []};
+						out[c.name][sp.level === 0 ? "cantrips" : "lvl1"].push(sp);
+					});
+			});
+		Object.values(out)
+			.forEach(lst => {
+				lst.cantrips.sort((a, b) => SortUtil.ascSort(a.name, b.name));
+				lst.lvl1.sort((a, b) => SortUtil.ascSort(a.name, b.name));
+			});
+		return out;
 	}
 
 	_setTabFromHash (tabName) {

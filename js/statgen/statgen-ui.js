@@ -23,6 +23,18 @@ export class StatGenUi extends BaseComponent {
 		...this._MODES,
 	];
 
+	static _SPELL_CAPS_L1 = {
+		// PHB 2014, incantesimi di 1° livello noti/preparati a livello 1
+		Bard: 4,
+		Cleric: 3,
+		Druid: 4,
+		Paladin: 0,
+		Ranger: 0,
+		Sorcerer: 2,
+		Warlock: 2,
+		Wizard: 6,
+	};
+
 	static _PROPS_CUSTOM = [
 		"rolled_formula",
 		"rolled_rollCount",
@@ -55,6 +67,8 @@ export class StatGenUi extends BaseComponent {
 		this._backgrounds = opts.backgrounds;
 		this._feats = opts.feats;
 		this._classes = opts.classes || [];
+		this._skillsAll = opts.skills || [];
+		this._classSpells = opts.classSpells || {};
 		this._tabMetasAdditional = opts.tabMetasAdditional;
 		this._isCharacterMode = opts.isCharacterMode;
 		this._isFvttMode = opts.isFvttMode;
@@ -914,7 +928,8 @@ export class StatGenUi extends BaseComponent {
 			hrPreview: hrPreviewBackground,
 		} = this._renderLevelOneBackground.render();
 
-		const {stgSel: stgClassSel, dispInfo: dispClassInfo} = this._render_getClassSection();
+		const {stgClassSel, dispClassInfo} = this._render_getClassSection();
+		const {stgNameIpt, dispDerived, dispSpells} = this._render_getDerivedSection();
 
 		const wrpAsi = this._render_getWrpAsi();
 
@@ -989,6 +1004,10 @@ export class StatGenUi extends BaseComponent {
 			${dispTashas}
 
 			${dispClassInfo}
+
+			${stgNameIpt}
+			${dispDerived}
+			${dispSpells}
 
 			${wrpAsi}
 		</div>`;
@@ -1075,6 +1094,286 @@ export class StatGenUi extends BaseComponent {
 		</div>`;
 
 		return {stgClassSel, dispClassInfo};
+	}
+
+	_render_getDerivedSection () {
+		const iptName = veT`<input class="ve-form-control form-control--minimal" type="text" placeholder="Nome del personaggio">`;
+		iptName.vee.val(this._state.common_characterName || "");
+		iptName.vee.onn("change", () => {
+			this._state.common_characterName = iptName.vee.val();
+		});
+
+		const dispDerived = veT`<div class="ve-flex-col ve-mt-3"></div>`;
+		const dispSpells = veT`<div class="ve-flex-col ve-mt-3"></div>`;
+
+		let lastData = null;
+		const hkRender = () => {
+			lastData = this._derived_getData();
+			this._derived_renderDerived(dispDerived, lastData);
+			this._derived_renderSpells(dispSpells, lastData);
+		};
+
+		dispDerived.vee.onn("change", (evt) => {
+			const key = evt.target?.dataset?.skill;
+			if (!key || !lastData) return;
+			const chosen = [...(this._state.common_ixSkillsChosen || [])];
+			const ix = chosen.indexOf(key);
+			if (evt.target.checked && ix === -1) {
+				if (chosen.length >= lastData.chooseCap) return;
+				chosen.push(key);
+			} else if (!evt.target.checked && ix !== -1) {
+				chosen.splice(ix, 1);
+			} else return;
+			this._state.common_ixSkillsChosen = chosen;
+		});
+
+		dispSpells.vee.onn("change", (evt) => {
+			const name = evt.target?.dataset?.spell;
+			const group = evt.target?.dataset?.spellGroup;
+			if (!name || !group || !lastData) return;
+			const chosen = [...(this._state[group] || [])];
+			const ix = chosen.indexOf(name);
+			const cap = group === "common_ixSpellsCantrips" ? lastData.cantripCap : lastData.spellCap;
+			if (evt.target.checked && ix === -1) {
+				if (chosen.length >= cap) return;
+				chosen.push(name);
+			} else if (!evt.target.checked && ix !== -1) {
+				chosen.splice(ix, 1);
+			} else return;
+			this._state[group] = chosen;
+		});
+
+		this.addHookAbilityScores(hkRender);
+		["common_ixClass", "common_ixRace", "common_ixBackground", "common_ixSkillsChosen", "common_ixSpellsCantrips", "common_ixSpellsLvl1"]
+			.forEach(prop => this._addHookBase(prop, hkRender));
+		hkRender();
+
+		this._addHookBase("common_ixClass", (prop) => {
+			if (prop == null || this.isSettingStateFromOverwrite()) return;
+			if (this._state.common_ixSkillsChosen.length) this._state.common_ixSkillsChosen = [];
+			if (this._state.common_ixSpellsCantrips.length) this._state.common_ixSpellsCantrips = [];
+			if (this._state.common_ixSpellsLvl1.length) this._state.common_ixSpellsLvl1 = [];
+		});
+
+		const stgNameIpt = veT`<div class="ve-flex-col ve-mt-3">
+			<div class="ve-mb-1">Personaggio</div>
+			${iptName}
+		</div>`;
+
+		return {stgNameIpt, dispDerived, dispSpells};
+	}
+
+	_derived_getData () {
+		const mods = {};
+		Parser.ABIL_ABVS.forEach(ab => {
+			const score = this._state[`common_export_${ab}`];
+			mods[ab] = score != null ? Parser.getAbilityModNumber(score) : null;
+		});
+		const isReady = Parser.ABIL_ABVS.every(ab => mods[ab] != null);
+
+		const cls = this.klass;
+		const sc = this.subclass;
+		const profSaves = new Set(cls?.proficiency || []);
+
+		const saves = Parser.ABIL_ABVS.map(ab => ({
+			ab,
+			mod: mods[ab],
+			prof: profSaves.has(ab),
+			total: isReady ? mods[ab] + (profSaves.has(ab) ? 2 : 0) : null,
+		}));
+
+		const hd = cls?.hd;
+		const hp = isReady && hd ? hd.number * hd.faces + mods.con : null;
+		const ac = isReady ? 10 + mods.dex : null;
+
+		const skillGroups = [
+			...(this.race?.skillProficiencies || []),
+			...(this.background?.skillProficiencies || []),
+			...((cls?.startingProficiencies || {}).skills || []),
+		];
+		const fixedSkills = new Set();
+		const choosePool = new Set();
+		let chooseCap = 0;
+		skillGroups.forEach(g => {
+			const ch = g.choose;
+			if (ch) {
+				const from = ch.from || (ch.weighted && ch.weighted.from) || [];
+				from.forEach(s => choosePool.add(s));
+				chooseCap += ch.count ?? ch.amount ?? 1;
+			} else {
+				Object.entries(g).forEach(([k, v]) => {
+					if (k === "any") {
+						this._skillsAll.forEach(s => choosePool.add(s.key));
+						chooseCap += v;
+					} else if (v) fixedSkills.add(k);
+				});
+			}
+		});
+
+		const chosenSkills = this._state.common_ixSkillsChosen || [];
+		const skills = this._skillsAll.map(sk => ({
+			...sk,
+			mod: mods[sk.ability],
+			isFixed: fixedSkills.has(sk.key),
+			isChoosable: choosePool.has(sk.key),
+			isChosen: chosenSkills.includes(sk.key),
+		}));
+
+		const classSpells = cls ? (this._classSpells[cls.name] || null) : null;
+		const cantripCap = classSpells ? (cls.cantripProgression?.[0] || 0) : 0;
+		const spellCap = isReady && classSpells ? this._derived_getSpellCap(cls) : 0;
+
+		return {isReady, mods, saves, hp, ac, skills, fixedSkills, choosePool, chooseCap, chosenSkills, cls, sc, classSpells, cantripCap, spellCap};
+	}
+
+	_derived_getSpellCap (cls) {
+		return StatGenUi._SPELL_CAPS_L1[cls.name] || 0;
+	}
+
+	_derived_renderDerived (disp, d) {
+		if (!d.cls) {
+			disp.vee.html(`<div class="ve-small ve-muted">Seleziona una classe per vedere i valori derivati.</div>`);
+			return;
+		}
+		if (!d.isReady) {
+			disp.vee.html(`<div class="ve-small ve-muted">I valori derivati vengono calcolati quando i punteggi sono definiti.</div>`);
+			return;
+		}
+
+		const fmt = n => `${n >= 0 ? "+" : ""}${n}`;
+
+		const savesHtml = d.saves.map(s => `<tr>
+			<td>${Parser.attAbvToFull(s.ab)}</td>
+			<td class="ve-text-center">${fmt(s.mod)}</td>
+			<td class="ve-text-center">${s.prof ? "+2" : "—"}</td>
+			<td class="ve-text-center"><b>${fmt(s.total)}</b></td>
+		</tr>`).join("");
+
+		const skillsHtml = d.skills.map(sk => `<tr>
+			<td><label class="ve-flex-v-center">
+				<input type="checkbox" data-skill="${sk.key}" ${sk.isFixed || sk.isChosen ? "checked" : ""} ${sk.isFixed || !sk.isChoosable ? "disabled" : ""}>
+				<span class="ve-ml-1">${sk.name} <span class="ve-muted ve-small">(${Parser.attAbvToFull(sk.ability)} ${fmt(sk.mod)})</span></span>
+			</label></td>
+		</tr>`).join("");
+
+		disp.vee.html(`<div class="ve-mb-1"><b>Valori derivati</b></div>
+			<div class="ve-mb-2">
+				<span class="ve-mr-3">Punti vita: <b>${d.hp}</b></span>
+				<span>Classe armatura: <b>${d.ac}</b> <span class="ve-muted ve-small">(senza armatura)</span></span>
+			</div>
+			<div class="ve-flex ve-w-100">
+				<div class="ve-w-50 ve-mr-2">
+					<div class="ve-mb-1">Salvaguardie</div>
+					<table class="ve-table ve-small">
+						<tbody>${savesHtml}</tbody>
+					</table>
+				</div>
+				<div class="ve-w-50">
+					<div class="ve-mb-1">Abilità <span class="ve-muted ve-small">(${d.chosenSkills.length}/${d.chooseCap} da scegliere)</span></div>
+					<table class="ve-table ve-small">
+						<tbody>${skillsHtml}</tbody>
+					</table>
+				</div>
+			</div>`);
+	}
+
+	_derived_renderSpells (disp, d) {
+		if (!d.cls || !d.cls.spellcastingAbility) {
+			disp.vee.html("");
+			return;
+		}
+		if (!d.classSpells) {
+			disp.vee.html(`<div class="ve-small ve-muted">Nessun elenco incantesimi disponibile per ${d.cls.name} (livello 1).</div>`);
+			return;
+		}
+		if (!d.cantripCap && !d.spellCap) {
+			disp.vee.html(`<div class="ve-small ve-muted">La classe non concede incantesimi a livello 1.</div>`);
+			return;
+		}
+
+		const renderList = (title, cap, spells, stateKey) => {
+			if (!spells?.length || cap <= 0) return "";
+			const chosen = this._state[stateKey] || [];
+			const rows = spells.map(sp => `<tr>
+				<td><label class="ve-flex-v-center">
+					<input type="checkbox" data-spell="${sp.name}" data-spell-group="${stateKey}" ${chosen.includes(sp.name) ? "checked" : ""}>
+					<span class="ve-ml-1">${sp.name}</span>
+				</label></td>
+			</tr>`).join("");
+			return `<div class="ve-w-50 ve-mr-2">
+				<div class="ve-mb-1">${title} <span class="ve-muted ve-small">(${chosen.length}/${cap})</span></div>
+				<table class="ve-table ve-small">
+					<tbody>${rows}</tbody>
+				</table>
+			</div>`;
+		};
+
+		disp.vee.html(`<div class="ve-mb-1"><b>Incantesimi</b> <span class="ve-muted ve-small">(lancio magie: ${Parser.attAbvToFull(d.cls.spellcastingAbility)})</span></div>
+			<div class="ve-flex ve-w-100">
+				${renderList("Incantesimi noti", d.cantripCap, d.classSpells.cantrips, "common_ixSpellsCantrips")}
+				${renderList("Incantesimi di 1° livello", d.spellCap, d.classSpells.lvl1, "common_ixSpellsLvl1")}
+			</div>`);
+	}
+
+	getSheetText () {
+		const d = this._derived_getData();
+		const abFull = ab => Parser.attAbvToFull(ab);
+		const fmt = n => `${n >= 0 ? "+" : ""}${n}`;
+
+		const lines = [`Nome: ${this._state.common_characterName || "—"}`];
+		if (this.race) lines.push(`Razza: ${this.race.name}`);
+		if (this.background) lines.push(`Sfondo: ${this.background.name}`);
+		if (d.cls) lines.push(`Classe: ${d.cls.name}${d.sc ? ` (${d.sc.name})` : ""}`);
+
+		if (d.isReady) {
+			lines.push("");
+			lines.push("Caratteristiche:");
+			Parser.ABIL_ABVS.forEach(ab => lines.push(`${abFull(ab)}: ${this._state[`common_export_${ab}`] ?? 0} (${fmt(d.mods[ab])})`));
+			lines.push("");
+			lines.push(`Punti vita: ${d.hp}`);
+			lines.push(`Classe armatura: ${d.ac} (senza armatura)`);
+			lines.push("Salvaguardie:");
+			d.saves.forEach(s => lines.push(`${abFull(s.ab)}: ${fmt(s.total)}${s.prof ? " (competente)" : ""}`));
+			const profSkills = d.skills.filter(s => s.isFixed || s.isChosen);
+			lines.push("Abilità:");
+			if (!profSkills.length) lines.push("—");
+			profSkills.forEach(s => lines.push(`${s.name}: ${fmt(s.mod + 2)} (competente)`));
+			if (d.classSpells) {
+				lines.push("");
+				lines.push(`Lancio magie (${abFull(d.cls.spellcastingAbility)}):`);
+				const cantrips = this._state.common_ixSpellsCantrips || [];
+				const lvl1 = this._state.common_ixSpellsLvl1 || [];
+				lines.push(`Incantesimi noti: ${cantrips.length ? cantrips.join(", ") : "—"}`);
+				lines.push(`Incantesimi di 1° livello: ${lvl1.length ? lvl1.join(", ") : "—"}`);
+			}
+		}
+		return lines.join("\n");
+	}
+
+	getSheetExport () {
+		const d = this._derived_getData();
+		return {
+			state: this.getSaveableState(),
+			sheet: {
+				name: this._state.common_characterName || null,
+				race: this.race?.name || null,
+				background: this.background?.name || null,
+				class: d.cls?.name || null,
+				subclass: d.sc?.name || null,
+				abilities: Object.fromEntries(Parser.ABIL_ABVS.map(ab => [ab, {
+					score: this._state[`common_export_${ab}`] ?? 0,
+					mod: d.mods[ab] ?? null,
+				}])),
+				hp: d.hp,
+				ac: d.ac,
+				saves: Object.fromEntries(d.saves.map(s => [s.ab, s.total])),
+				skills: d.skills.filter(s => s.isFixed || s.isChosen).map(s => s.key),
+				spells: {
+					cantrips: [...(this._state.common_ixSpellsCantrips || [])],
+					level1: [...(this._state.common_ixSpellsLvl1 || [])],
+				},
+			},
+		};
 	}
 
 	_renderLevelOneRace = new StatGenUiRenderLevelOneRace({parent: this});
@@ -1600,6 +1899,11 @@ export class StatGenUi extends BaseComponent {
 
 			common_ixClass: null,
 			common_ixSubclass: null,
+
+			common_characterName: "",
+			common_ixSkillsChosen: [],
+			common_ixSpellsCantrips: [],
+			common_ixSpellsLvl1: [],
 
 			common_pulseAsi: false, // Used as a general pulse for all changes in form data
 			common_cntAsi: 0,

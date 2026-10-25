@@ -930,7 +930,7 @@ export class StatGenUi extends BaseComponent {
 		} = this._renderLevelOneBackground.render();
 
 		const {stgClassSel, dispClassInfo} = this._render_getClassSection();
-		const {stgNameIpt, dispDerived, dispSpells} = this._render_getDerivedSection();
+		const {stgNameIpt, dispDerivedBase, dispSkills, dispSpells} = this._render_getDerivedSection();
 
 		const wrpAsi = this._render_getWrpAsi();
 
@@ -938,7 +938,20 @@ export class StatGenUi extends BaseComponent {
 			<div class="ve-flex-v-center"><i>Please select a mode.</i></div>
 		</div>`;
 
-		stgMain = veT`<div class="ve-flex-col ve-w-100 ve-h-100">
+		// region Wizard: 7 passi con navigazione
+		const wrpStep1 = veT`<div class="ve-flex-col ve-w-100">
+			${stgNameIpt}
+			${stgRaceSel}
+			${dispPreviewRace}
+			${hrPreviewRaceTashas}
+			${dispTashas}
+		</div>`;
+		const wrpStep2 = veT`<div class="ve-flex-col ve-w-100">
+			${stgBackgroundSel}
+			${dispPreviewBackground}
+			${hrPreviewBackground}
+		</div>`;
+		const wrpStep3 = veT`<div class="ve-flex-col ve-w-100">
 			${stgRolledHeader}
 			${stgArrayHeader}
 			${stgManualHeader}
@@ -982,10 +995,6 @@ export class StatGenUi extends BaseComponent {
 							${metasTotalAndMod.map(it => it.wrpIptMod)}
 						</div>
 					</div>
-
-					${stgBackgroundSel}
-					${stgRaceSel}
-					${stgClassSel}
 				</div>
 
 				${vrPbCustom}
@@ -993,22 +1002,105 @@ export class StatGenUi extends BaseComponent {
 
 				${stgPbCustom}
 			</div>
-
-			<hr class="ve-hr-3">
-
-			${dispPreviewBackground}
-
-			${hrPreviewBackground}
-
-			${dispPreviewRace}
-			${hrPreviewRaceTashas}
-			${dispTashas}
-
+		</div>`;
+		const wrpStep4 = veT`<div class="ve-flex-col ve-w-100">
+			${stgClassSel}
 			${dispClassInfo}
-
-			${stgNameIpt}
-			${dispDerived}
+			${dispDerivedBase}
+		</div>`;
+		const wrpStep5 = veT`<div class="ve-flex-col ve-w-100">
+			${dispSkills}
+		</div>`;
+		const wrpStep6 = veT`<div class="ve-flex-col ve-w-100">
 			${dispSpells}
+		</div>`;
+		const dispSummary = veT`<div class="ve-flex-col ve-w-100"></div>`;
+		const wrpStep7 = veT`<div class="ve-flex-col ve-w-100">
+			${dispSummary}
+		</div>`;
+		const wrpSteps = [wrpStep1, wrpStep2, wrpStep3, wrpStep4, wrpStep5, wrpStep6, wrpStep7];
+
+		const STEP_TITLES = [
+			"Nome e razza",
+			"Sfondo",
+			"Punteggi di abilità",
+			"Classe e sottoclasse",
+			"Abilità",
+			"Incantesimi",
+			"Scheda finale",
+		];
+
+		const btnPrev = veT`<button class="ve-btn ve-btn-default">&larr; Indietro</button>`;
+		const btnNext = veT`<button class="ve-btn ve-btn-default">Avanti &rarr;</button>`;
+		const btnNew = veT`<button class="ve-btn ve-btn-default">Nuovo personaggio</button>`;
+		const lblStep = veT`<span></span>`;
+		const wrpNav = veT`<div class="ve-flex ve-flex-v-center ve-w-100 ve-mb-3 ve-px-3">
+			${btnPrev}
+			<div class="ve-mx-3 ve-bold ve-flex-v-center">${lblStep}</div>
+			${btnNext}
+			<div class="ve-ml-auto ve-flex-v-center">${btnNew}</div>
+		</div>`;
+
+		const getStep = () => {
+			const s = this._state.common_wizardStep;
+			return s >= 1 && s <= 7 ? s : 1;
+		};
+
+		const canAdvance = (step) => {
+			switch (step) {
+				case 1: return this.race != null ? null : "Seleziona una razza";
+				case 2: return this.background != null ? null : "Seleziona uno sfondo";
+				case 3: return Parser.ABIL_ABVS.every(ab => this._state[`common_export_${ab}`] != null)
+					? null : "Completa i punteggi di abilità";
+				case 4: return this.klass != null ? null : "Seleziona una classe";
+				case 5: {
+					const cntChosen = (this._state.common_ixSkillsChosen || []).length;
+					const cap = this._derived_getData().chooseCap;
+					return cntChosen >= cap ? null : `Scegli ancora ${cap - cntChosen} abilità`;
+				}
+				default: return null;
+			}
+		};
+
+		const hkWizard = () => {
+			const step = getStep();
+			wrpSteps.forEach((wrp, i) => wrp.vee.toggle(i + 1 === step));
+			lblStep.vee.html(`Passo ${step}/7: ${STEP_TITLES[step - 1]}`);
+			btnPrev.vee.attr("disabled", step <= 1);
+			const reason = step >= 7 ? null : canAdvance(step);
+			btnNext.vee.attr("disabled", step >= 7 || reason != null);
+			btnNext.vee.attr("title", reason || "");
+			if (step === 7) this._wizard_renderSummary(dispSummary);
+		};
+
+		this._addHookAll("state", hkWizard);
+		hkWizard();
+
+		btnPrev.vee.onn("click", () => {
+			const step = getStep();
+			if (step > 1) this._state.common_wizardStep = step - 1;
+		});
+		btnNext.vee.onn("click", () => {
+			const step = getStep();
+			if (step >= 7 || canAdvance(step) != null) return;
+			this._state.common_wizardStep = step + 1;
+		});
+		btnNew.vee.onn("click", () => {
+			if (!confirm("Azzerare tutti i dati del personaggio e ricominciare dal primo passo?")) return;
+			this.doResetAll();
+		});
+		// endregion
+
+		stgMain = veT`<div class="ve-flex-col ve-w-100 ve-h-100">
+			${wrpNav}
+
+			${wrpStep1}
+			${wrpStep2}
+			${wrpStep3}
+			${wrpStep4}
+			${wrpStep5}
+			${wrpStep6}
+			${wrpStep7}
 
 			${wrpAsi}
 		</div>`;
@@ -1103,18 +1195,25 @@ export class StatGenUi extends BaseComponent {
 		iptName.vee.onn("change", () => {
 			this._state.common_characterName = iptName.vee.val();
 		});
+		// Sync del DOM su reset ("Nuovo personaggio") e load di stato
+		this._addHookBase("common_characterName", () => {
+			const v = this._state.common_characterName || "";
+			if (iptName.vee.val() !== v) iptName.vee.val(v);
+		});
 
-		const dispDerived = veT`<div class="ve-flex-col ve-mt-3"></div>`;
+		const dispDerivedBase = veT`<div class="ve-flex-col ve-mt-3"></div>`;
+		const dispSkills = veT`<div class="ve-flex-col ve-mt-3"></div>`;
 		const dispSpells = veT`<div class="ve-flex-col ve-mt-3"></div>`;
 
 		let lastData = null;
 		const hkRender = () => {
 			lastData = this._derived_getData();
-			this._derived_renderDerived(dispDerived, lastData);
+			this._derived_renderDerivedBase(dispDerivedBase, lastData);
+			this._derived_renderSkills(dispSkills, lastData);
 			this._derived_renderSpells(dispSpells, lastData);
 		};
 
-		dispDerived.vee.onn("change", (evt) => {
+		dispSkills.vee.onn("change", (evt) => {
 			const key = evt.target?.dataset?.skill;
 			if (!key || !lastData) return;
 			const chosen = [...(this._state.common_ixSkillsChosen || [])];
@@ -1161,7 +1260,7 @@ export class StatGenUi extends BaseComponent {
 			${iptName}
 		</div>`;
 
-		return {stgNameIpt, dispDerived, dispSpells};
+		return {stgNameIpt, dispDerivedBase, dispSkills, dispSpells};
 	}
 
 	_derived_getData () {
@@ -1231,7 +1330,7 @@ export class StatGenUi extends BaseComponent {
 		return StatGenUi._SPELL_CAPS_L1[cls.name] || 0;
 	}
 
-	_derived_renderDerived (disp, d) {
+	_derived_renderDerivedBase (disp, d) {
 		if (!d.cls) {
 			disp.vee.html(`<div class="ve-small ve-muted">Seleziona una classe per vedere i valori derivati.</div>`);
 			return;
@@ -1250,6 +1349,25 @@ export class StatGenUi extends BaseComponent {
 			<td class="ve-text-center"><b>${fmt(s.total)}</b></td>
 		</tr>`).join("");
 
+		disp.vee.html(`<div class="ve-mb-1"><b>Valori derivati</b></div>
+			<div class="ve-mb-2">
+				<span class="ve-mr-3">Punti vita: <b>${d.hp}</b></span>
+				<span>Classe armatura: <b>${d.ac}</b> <span class="ve-muted ve-small">(senza armatura)</span></span>
+			</div>
+			<div class="ve-mb-1">Salvaguardie</div>
+			<table class="ve-table ve-small ve-w-50">
+				<tbody>${savesHtml}</tbody>
+			</table>`);
+	}
+
+	_derived_renderSkills (disp, d) {
+		if (!d.cls) {
+			disp.vee.html(`<div class="ve-small ve-muted">Seleziona una classe per vedere le abilità.</div>`);
+			return;
+		}
+
+		const fmt = n => `${n >= 0 ? "+" : ""}${n}`;
+
 		const skillsHtml = d.skills.map(sk => `<tr>
 			<td><label class="ve-flex-v-center">
 				<input type="checkbox" data-skill="${sk.key}" ${sk.isFixed || sk.isChosen ? "checked" : ""} ${sk.isFixed || !sk.isChoosable ? "disabled" : ""}>
@@ -1257,25 +1375,10 @@ export class StatGenUi extends BaseComponent {
 			</label></td>
 		</tr>`).join("");
 
-		disp.vee.html(`<div class="ve-mb-1"><b>Valori derivati</b></div>
-			<div class="ve-mb-2">
-				<span class="ve-mr-3">Punti vita: <b>${d.hp}</b></span>
-				<span>Classe armatura: <b>${d.ac}</b> <span class="ve-muted ve-small">(senza armatura)</span></span>
-			</div>
-			<div class="ve-flex ve-w-100">
-				<div class="ve-w-50 ve-mr-2">
-					<div class="ve-mb-1">Salvaguardie</div>
-					<table class="ve-table ve-small">
-						<tbody>${savesHtml}</tbody>
-					</table>
-				</div>
-				<div class="ve-w-50">
-					<div class="ve-mb-1">Abilità <span class="ve-muted ve-small">(${d.chosenSkills.length}/${d.chooseCap} da scegliere)</span></div>
-					<table class="ve-table ve-small">
-						<tbody>${skillsHtml}</tbody>
-					</table>
-				</div>
-			</div>`);
+		disp.vee.html(`<div class="ve-mb-1"><b>Abilità</b> <span class="ve-muted ve-small">(${d.chosenSkills.length}/${d.chooseCap} da scegliere)</span></div>
+			<table class="ve-table ve-small">
+				<tbody>${skillsHtml}</tbody>
+			</table>`);
 	}
 
 	_derived_renderSpells (disp, d) {
@@ -1314,6 +1417,14 @@ export class StatGenUi extends BaseComponent {
 				${renderList("Incantesimi noti", d.cantripCap, d.classSpells.cantrips, "common_ixSpellsCantrips")}
 				${renderList("Incantesimi di 1° livello", d.spellCap, d.classSpells.lvl1, "common_ixSpellsLvl1")}
 			</div>`);
+	}
+
+	_wizard_renderSummary (disp) {
+		const text = this.getSheetText();
+		const esc = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+		disp.vee.html(`<div class="ve-mb-1"><b>Scheda del personaggio</b></div>
+			<pre style="white-space: pre-wrap;" class="ve-small ve-mb-1">${esc}</pre>
+			<div class="ve-small ve-muted">Per esportare usa i pulsanti in alto: <b>Copia Scheda</b> o <b>Scarica Scheda (JSON)</b>.</div>`);
 	}
 
 	getSheetText () {
@@ -1902,6 +2013,7 @@ export class StatGenUi extends BaseComponent {
 			common_ixSubclass: null,
 
 			common_characterName: "",
+			common_wizardStep: 1,
 			common_ixSkillsChosen: [],
 			common_ixSpellsCantrips: [],
 			common_ixSpellsLvl1: [],

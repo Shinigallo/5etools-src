@@ -1478,16 +1478,18 @@ export class StatGenUi extends BaseComponent {
 
 		if (st.common_characterName) values["CharacterName"] = st.common_characterName;
 		if (this.race) values["Race "] = this.race.name;
-		if (this.klass) values["ClassLevel"] = `${this.klass.name} 1`;
+		if (this.klass) values["ClassLevel"] = `${this.klass.name} 1${this.subclass ? " - " + this.subclass.name : ""}`;
 		if (this.background) values["Background"] = this.background.name;
 		values["XP"] = "0";
 		values["ProfBonus"] = "+2";
-		values["Speed"] = `${this.race?.speed ?? 30} ft`;
+		// Scheda italiana 2014: velocita' in metri (30 ft = 9 m)
+		values["Speed"] = `${Math.round((this.race?.speed ?? 30) / 3.2808)} m`;
 
 		if (d.isReady) {
 			values["AC"] = `${d.ac}`;
 			values["Initiative"] = fmt(d.mods.dex);
-			values["Passive"] = `${10 + d.mods.wis}`;
+			const perc = d.skills.find(s => s.key === "perception");
+			values["Passive"] = `${10 + (perc?.mod ?? 0) + ((perc?.isFixed || perc?.isChosen) ? 2 : 0)}`;
 			values["HPMax"] = `${d.hp}`;
 			values["HPCurrent"] = `${d.hp}`;
 			values["HPTemp"] = "0";
@@ -1502,7 +1504,7 @@ export class StatGenUi extends BaseComponent {
 			});
 			const saveIds = {str: "ST Strength", dex: "ST Dexterity", con: "ST Constitution", int: "ST Intelligence", wis: "ST Wisdom", cha: "ST Charisma"};
 			d.saves.forEach(s => {
-				values[saveIds[s.ab]] = `${s.total}`;
+				values[saveIds[s.ab]] = fmt(s.total);
 				if (s.prof) checks.push(`${s.ab.toUpperCase()}prof`);
 			});
 			const skillIds = {
@@ -1516,27 +1518,39 @@ export class StatGenUi extends BaseComponent {
 				const id = skillIds[sk.key];
 				if (!id) return;
 				const prof = sk.isFixed || sk.isChosen;
-				values[id] = `${(sk.mod ?? 0) + (prof ? 2 : 0)}`;
+				values[id] = fmt((sk.mod ?? 0) + (prof ? 2 : 0));
 				if (prof) checks.push(`${id}P`);
 			});
 			if (d.classSpells && d.cls.spellcastingAbility) {
 				const mod = d.mods[d.cls.spellcastingAbility];
-				values["AttacksSpellcasting"] = `Spell attack: ${fmt(2 + mod)} | Save DC: ${10 + mod}`;
 				values["Spellcasting Class 2"] = `${d.cls.name} 1`;
-				values["SpellcastingAbility 2"] = `${Parser.attAbvToFull(d.cls.spellcastingAbility)} ${fmt(mod)}`;
+				// Pagina 3 usa le abbreviazioni (es. "INT +4")
+				values["SpellcastingAbility 2"] = `${d.cls.spellcastingAbility.toUpperCase()} ${fmt(mod)}`;
 				values["SpellSaveDC  2"] = `${10 + mod}`;
 				values["SpellAtkBonus 2"] = fmt(2 + mod);
-				// livello 1: tutte le caster 2014 (PHB + Artificer TCE) hanno 2 slot di 1° livello
+				// Slot 2014 livello 1: 2 slot di 1° livello (PHB + Artificer TCE); "SlotsRemaining" = slot SPESI
 				values["SlotsTotal 19"] = "2";
-				values["SlotsRemaining 19"] = "2";
-			} else {
-				values["AttacksSpellcasting"] = `Melee attack: ${fmt(2 + Math.max(d.mods.str, d.mods.dex))}`;
+				values["SlotsRemaining 19"] = "0";
+				for (let lv = 2; lv <= 9; lv++) {
+					values[`SlotsTotal ${18 + lv}`] = "0";
+					values[`SlotsRemaining ${18 + lv}`] = "0";
+				}
 			}
 		}
 
+		// Suffissi [R]/[C] (rituale/concentrazione) nel formato della scheda di riferimento: "Nome [R,C]"
+		const spellDb = this.klass ? (this._classSpells[this.klass.name] || {cantrips: [], lvl1: []}) : {cantrips: [], lvl1: []};
+		const spellFlags = new Map([...spellDb.cantrips, ...spellDb.lvl1].map(sp => [String(sp.name).toLowerCase(), sp]));
+		const spellLabel = nm => {
+			const sp = spellFlags.get(String(nm).toLowerCase());
+			const f = [];
+			if (sp?.meta?.ritual) f.push("R");
+			if (sp?.duration?.some(dd => dd.concentration)) f.push("C");
+			return f.length ? `${nm} [${f.join(",")}]` : String(nm);
+		};
 		const spells = {
-			cantrips: [...(st.common_ixSpellsCantrips || [])],
-			lvl1: [...(st.common_ixSpellsLvl1 || [])],
+			cantrips: (st.common_ixSpellsCantrips || []).map(String),
+			lvl1: (st.common_ixSpellsLvl1 || []).map(spellLabel),
 		};
 		return {values, checks, spells};
 	}
@@ -1563,12 +1577,14 @@ export class StatGenUi extends BaseComponent {
 			};
 			Object.entries(values).forEach(([id, val]) => setField(id, val));
 			checks.forEach(checkBox);
-			// Righe incantesimi della pagina 3 (posizioni fisse del modello) e relative caselle "prepared"
-			const CANTRIP_ROWS = ["Spells 1014", "Spells 1016", "Spells 1017", "Spells 1018"];
+			// Righe incantesimi pagina 3 (geometria verificata del modello: trucchetti y 500-630, 1° livello y 260-455)
+			const CANTRIP_ROWS = ["Spells 1014", "Spells 1016", "Spells 1017", "Spells 1018", "Spells 1019", "Spells 1020", "Spells 1021", "Spells 1022"];
 			const LVL1_ROWS = [
-				["Spells 1046", "Check Box 313"], ["Spells 1034", "Check Box 310"], ["Spells 1035", "Check Box 3020"],
-				["Spells 1036", "Check Box 3021"], ["Spells 1037", "Check Box 3022"], ["Spells 1038", "Check Box 3023"],
-				["Spells 1039", "Check Box 3024"], ["Spells 1040", "Check Box 3025"],
+				["Spells 101014", "Check Box 2510"], ["Spells 1015", "Check Box 251"], ["Spells 1023", "Check Box 309"],
+				["Spells 1024", "Check Box 3010"], ["Spells 1025", "Check Box 3011"], ["Spells 1026", "Check Box 3012"],
+				["Spells 1027", "Check Box 3013"], ["Spells 1028", "Check Box 3014"], ["Spells 1029", "Check Box 3015"],
+				["Spells 1030", "Check Box 3016"], ["Spells 1031", "Check Box 3017"], ["Spells 1032", "Check Box 3018"],
+				["Spells 1033", "Check Box 3019"],
 			];
 			spells.cantrips.slice(0, CANTRIP_ROWS.length).forEach((n, i) => setField(CANTRIP_ROWS[i], n));
 			spells.lvl1.slice(0, LVL1_ROWS.length).forEach((n, i) => {

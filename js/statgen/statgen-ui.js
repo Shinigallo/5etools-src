@@ -938,7 +938,7 @@ export class StatGenUi extends BaseComponent {
 			<div class="ve-flex-v-center"><i>Please select a mode.</i></div>
 		</div>`;
 
-		// region Wizard: 7 passi con navigazione
+		// region Wizard: 8 passi con navigazione
 		const wrpStep1 = veT`<div class="ve-flex-col ve-w-100">
 			${stgNameIpt}
 			${stgRaceSel}
@@ -1018,7 +1018,11 @@ export class StatGenUi extends BaseComponent {
 		const wrpStep7 = veT`<div class="ve-flex-col ve-w-100">
 			${dispSummary}
 		</div>`;
-		const wrpSteps = [wrpStep1, wrpStep2, wrpStep3, wrpStep4, wrpStep5, wrpStep6, wrpStep7];
+		const dispSheet = veT`<div class="ve-flex-col ve-w-100"></div>`;
+		const wrpStep8 = veT`<div class="ve-flex-col ve-w-100">
+			${dispSheet}
+		</div>`;
+		const wrpSteps = [wrpStep1, wrpStep2, wrpStep3, wrpStep4, wrpStep5, wrpStep6, wrpStep7, wrpStep8];
 
 		const STEP_TITLES = [
 			"Nome e razza",
@@ -1028,6 +1032,7 @@ export class StatGenUi extends BaseComponent {
 			"Abilità",
 			"Incantesimi",
 			"Scheda finale",
+			"Scheda ufficiale",
 		];
 
 		const btnPrev = veT`<button class="ve-btn ve-btn-default">&larr; Indietro</button>`;
@@ -1043,7 +1048,7 @@ export class StatGenUi extends BaseComponent {
 
 		const getStep = () => {
 			const s = this._state.common_wizardStep;
-			return s >= 1 && s <= 7 ? s : 1;
+			return s >= 1 && s <= 8 ? s : 1;
 		};
 
 		const canAdvance = (step) => {
@@ -1065,12 +1070,13 @@ export class StatGenUi extends BaseComponent {
 		const hkWizard = () => {
 			const step = getStep();
 			wrpSteps.forEach((wrp, i) => wrp.vee.toggle(i + 1 === step));
-			lblStep.vee.html(`Passo ${step}/7: ${STEP_TITLES[step - 1]}`);
+			lblStep.vee.html(`Passo ${step}/8: ${STEP_TITLES[step - 1]}`);
 			btnPrev.vee.attr("disabled", step <= 1);
-			const reason = step >= 7 ? null : canAdvance(step);
-			btnNext.vee.attr("disabled", step >= 7 || reason != null);
+			const reason = step >= 8 ? null : canAdvance(step);
+			btnNext.vee.attr("disabled", step >= 8 || reason != null);
 			btnNext.vee.attr("title", reason || "");
 			if (step === 7) this._wizard_renderSummary(dispSummary);
+			if (step === 8) this._wizard_renderOfficialSheet(dispSheet);
 		};
 
 		this._addHookAll("state", hkWizard);
@@ -1082,7 +1088,7 @@ export class StatGenUi extends BaseComponent {
 		});
 		btnNext.vee.onn("click", () => {
 			const step = getStep();
-			if (step >= 7 || canAdvance(step) != null) return;
+			if (step >= 8 || canAdvance(step) != null) return;
 			this._state.common_wizardStep = step + 1;
 		});
 		btnNew.vee.onn("click", () => {
@@ -1101,6 +1107,7 @@ export class StatGenUi extends BaseComponent {
 			${wrpStep5}
 			${wrpStep6}
 			${wrpStep7}
+			${wrpStep8}
 
 			${wrpAsi}
 		</div>`;
@@ -1460,6 +1467,128 @@ export class StatGenUi extends BaseComponent {
 			}
 		}
 		return lines.join("\n");
+	}
+
+	_wizard_fillSheetFields () {
+		const d = this._derived_getData();
+		const st = this._state;
+		const fmt = n => `${n >= 0 ? "+" : ""}${n}`;
+		const values = {};
+		const checks = [];
+
+		if (st.common_characterName) values["CharacterName"] = st.common_characterName;
+		if (this.race) values["Race "] = this.race.name;
+		if (this.klass) values["ClassLevel"] = `${this.klass.name} 1`;
+		if (this.background) values["Background"] = this.background.name;
+		values["XP"] = "0";
+		values["ProfBonus"] = "+2";
+		values["Speed"] = `${this.race?.speed ?? 30} ft`;
+
+		if (d.isReady) {
+			values["AC"] = `${d.ac}`;
+			values["Initiative"] = fmt(d.mods.dex);
+			values["Passive"] = `${10 + d.mods.wis}`;
+			values["HPMax"] = `${d.hp}`;
+			values["HPCurrent"] = `${d.hp}`;
+			values["HPTemp"] = "0";
+			if (d.cls?.hd) {
+				const hdStr = `${d.cls.hd.number}d${d.cls.hd.faces}`;
+				values["HD"] = hdStr;
+				values["HDTotal"] = hdStr;
+			}
+			Parser.ABIL_ABVS.forEach(ab => {
+				values[ab.toUpperCase()] = `${st[`common_export_${ab}`]}`;
+				values[`${ab.toUpperCase()}mod`] = fmt(d.mods[ab]);
+			});
+			const saveIds = {str: "ST Strength", dex: "ST Dexterity", con: "ST Constitution", int: "ST Intelligence", wis: "ST Wisdom", cha: "ST Charisma"};
+			d.saves.forEach(s => {
+				values[saveIds[s.ab]] = `${s.total}`;
+				if (s.prof) checks.push(`${s.ab.toUpperCase()}prof`);
+			});
+			const skillIds = {
+				"acrobatics": "ACRO", "animal handling": "ANIM", "arcana": "ARC", "athletics": "ATH",
+				"deception": "DEC", "history": "HIST", "insight": "INS", "intimidation": "INTI",
+				"investigation": "INV", "medicine": "MED", "nature": "NAT", "perception": "PERC",
+				"performance": "PERF", "persuasion": "PERS", "religion": "REL", "sleight of hand": "SLE",
+				"stealth": "STLTH", "survival": "SURV",
+			};
+			d.skills.forEach(sk => {
+				const id = skillIds[sk.key];
+				if (!id) return;
+				const prof = sk.isFixed || sk.isChosen;
+				values[id] = `${(sk.mod ?? 0) + (prof ? 2 : 0)}`;
+				if (prof) checks.push(`${id}P`);
+			});
+			if (d.classSpells && d.cls.spellcastingAbility) {
+				const mod = d.mods[d.cls.spellcastingAbility];
+				values["AttacksSpellcasting"] = `Spell attack: ${fmt(2 + mod)} | Save DC: ${10 + mod}`;
+				values["Spellcasting Class 2"] = `${d.cls.name} 1`;
+				values["SpellcastingAbility 2"] = `${Parser.attAbvToFull(d.cls.spellcastingAbility)} ${fmt(mod)}`;
+				values["SpellSaveDC  2"] = `${10 + mod}`;
+				values["SpellAtkBonus 2"] = fmt(2 + mod);
+				// livello 1: tutte le caster 2014 (PHB + Artificer TCE) hanno 2 slot di 1° livello
+				values["SlotsTotal 19"] = "2";
+				values["SlotsRemaining 19"] = "2";
+			} else {
+				values["AttacksSpellcasting"] = `Melee attack: ${fmt(2 + Math.max(d.mods.str, d.mods.dex))}`;
+			}
+		}
+
+		const spells = {
+			cantrips: [...(st.common_ixSpellsCantrips || [])],
+			lvl1: [...(st.common_ixSpellsLvl1 || [])],
+		};
+		return {values, checks, spells};
+	}
+
+	async _wizard_renderOfficialSheet (disp) {
+		const tok = (this._sheetTok = (this._sheetTok ?? 0) + 1);
+		disp.vee.html(`<div class="ve-small ve-muted">Caricamento della scheda ufficiale…</div>`);
+		try {
+			const pdfLib = window.PDFLib;
+			if (!pdfLib) throw new Error("pdf-lib non caricata");
+			const {values, checks, spells} = this._wizard_fillSheetFields();
+			const res = await fetch(`${Renderer.get().baseUrl}scheda-personaggio.pdf`);
+			if (!res.ok) throw new Error(`PDF non trovato (HTTP ${res.status})`);
+			const pdfDoc = await pdfLib.PDFDocument.load(await res.arrayBuffer());
+			const form = pdfDoc.getForm();
+			const setField = (id, val) => {
+				try {
+					const f = form.getField(id);
+					if (f instanceof pdfLib.PDFTextField) f.setText(val);
+				} catch (e) { /* campo non presente nel modello */ }
+			};
+			const checkBox = id => {
+				try { form.getCheckBox(id).check(); } catch (e) { /* casella non presente */ }
+			};
+			Object.entries(values).forEach(([id, val]) => setField(id, val));
+			checks.forEach(checkBox);
+			// Righe incantesimi della pagina 3 (posizioni fisse del modello) e relative caselle "prepared"
+			const CANTRIP_ROWS = ["Spells 1014", "Spells 1016", "Spells 1017", "Spells 1018"];
+			const LVL1_ROWS = [
+				["Spells 1046", "Check Box 313"], ["Spells 1034", "Check Box 310"], ["Spells 1035", "Check Box 3020"],
+				["Spells 1036", "Check Box 3021"], ["Spells 1037", "Check Box 3022"], ["Spells 1038", "Check Box 3023"],
+				["Spells 1039", "Check Box 3024"], ["Spells 1040", "Check Box 3025"],
+			];
+			spells.cantrips.slice(0, CANTRIP_ROWS.length).forEach((n, i) => setField(CANTRIP_ROWS[i], n));
+			spells.lvl1.slice(0, LVL1_ROWS.length).forEach((n, i) => {
+				setField(LVL1_ROWS[i][0], n);
+				checkBox(LVL1_ROWS[i][1]);
+			});
+			const outBytes = await pdfDoc.save();
+			if (tok !== this._sheetTok) return;
+			if (this._sheetBlobUrl) URL.revokeObjectURL(this._sheetBlobUrl);
+			this._sheetBlobUrl = URL.createObjectURL(new Blob([outBytes], {type: "application/pdf"}));
+			disp.vee.html(`<div class="ve-flex-col ve-w-100">
+				<div class="ve-small ve-muted ve-mb-2">Scheda ufficiale compilata con i dati del personaggio. Le caselle narrative (personalità, equipaggiamento, retroscena) vanno completate a mano.</div>
+				<a class="ve-btn ve-btn-default ve-mb-2" href="${this._sheetBlobUrl}" download="scheda-personaggio.pdf">Scarica la scheda PDF</a>
+				<iframe src="${this._sheetBlobUrl}" style="width:100%;height:800px;border:1px solid #ccc;"></iframe>
+			</div>`);
+		} catch (err) {
+			if (tok !== this._sheetTok) return;
+			const msg = String(err?.message ?? err).replace(/</g, "&lt;");
+			disp.vee.html(`<div class="ve-small ve-muted">Scheda ufficiale non disponibile: ${msg}. La scheda in testo resta disponibile al passo 7.</div>`);
+		}
 	}
 
 	getSheetExport () {

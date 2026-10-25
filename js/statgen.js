@@ -134,7 +134,8 @@ class StatGenPage {
 						html: `<span class="glyphicon glyphicon-save"></span>`,
 						title: "Scarica Scheda (JSON)",
 						pFnClick: () => {
-							DataUtil.userDownload("scheda-personaggio", this._statGenUi.getSheetExport(), {fileType: "statgen"});
+							// fileType != "statgen" per non mescolarsi a "Load from File" (la scheda e' un record, non uno stato salvabile)
+							DataUtil.userDownload("scheda-personaggio", this._statGenUi.getSheetExport(), {fileType: "scheda"});
 						},
 					},
 				],

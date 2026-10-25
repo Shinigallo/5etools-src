@@ -2,6 +2,7 @@ import {StatGenUi} from "./statgen/statgen-ui.js";
 import {VetoolsConfig} from "./utils-config/utils-config-config.js";
 import {UtilsEntityBackground} from "./utils/utils-entity-background.js";
 import {UtilsEntityRace} from "./utils/utils-entity-race.js";
+import {SITE_STYLE__CLASSIC} from "./consts.js";
 
 class StatGenPage {
 	constructor () {
@@ -161,7 +162,8 @@ class StatGenPage {
 				}),
 		);
 
-		const styleHint = VetoolsConfig.get("styleSwitcher", "style");
+		// PG da scheda 2014: i bonus di razza devono restare attivi (no migrazione 2024)
+		const styleHint = SITE_STYLE__CLASSIC;
 		cpyRaces.forEach(ent => UtilsEntityRace.mutMigrateForVersion(ent, {styleHint}));
 
 		return cpyRaces;

@@ -451,6 +451,12 @@ export class StatGenUi extends BaseComponent {
 		this._proxyAssignSimple("state", this._getDefaultState(), true);
 	}
 
+	// Fonti escluse dal wizard (razze/sfondi/classi); vuoto = tutte incluse
+	_srcIsAllowed (ent) {
+		const excl = this._state.common_srcExcl;
+		return !excl?.length || !excl.includes(ent?.source);
+	}
+
 	_render_getStgPbHeader () {
 		const iptBudget = ComponentUiUtil.getIptInt(
 			this,
@@ -1039,11 +1045,91 @@ export class StatGenUi extends BaseComponent {
 		const btnNext = veT`<button class="ve-btn ve-btn-default">Avanti &rarr;</button>`;
 		const btnNew = veT`<button class="ve-btn ve-btn-default">Nuovo personaggio</button>`;
 		const lblStep = veT`<span></span>`;
+
+		// region Filtro fonti (include/esclude libri, come nei filtri delle pagine)
+		const btnSrc = veT`<button class="ve-btn ve-btn-default ve-mr-2">Fonti</button>`;
+		const wrpSrcPanel = veT`<div style="display: none; position: absolute; top: 100%; right: 0; z-index: 100; background: #fff; border: 1px solid #ccc; box-shadow: 0 2px 8px rgba(0, 0, 0, .25); padding: 8px; width: 280px; max-height: 420px; overflow-y: auto; text-align: left;"></div>`;
+		const wrpSrc = veT`<div style="position: relative; display: inline-flex;">
+			${btnSrc}
+			${wrpSrcPanel}
+		</div>`;
+
+		const getAllSrcs = () => [...new Set(
+			[
+				...this._races,
+				...this._backgrounds,
+				...this._classes,
+			].map(it => it.source).filter(Boolean),
+		)];
+
+		const getSrcGroups = () => {
+			const groups = {};
+			getAllSrcs().forEach(src => {
+				(groups[SourceUtil.getFilterGroup(src)] ||= []).push(src);
+			});
+			// Le chiavi 0..4 vengono iterate in ordine crescente: Standard, Partnered, Other, Prerelease, Homebrew
+			return Object.entries(groups).map(([g, list]) => ({
+				name: SourceUtil.getFilterGroupName(Number(g)),
+				srcs: list.sort((a, b) => Parser.sourceJsonToFull(a).localeCompare(Parser.sourceJsonToFull(b))),
+			}));
+		};
+
+		const renderSrcPanel = () => {
+			const excl = new Set(this._state.common_srcExcl || []);
+			const rows = getSrcGroups()
+				.map(({name, srcs}) => {
+					const items = srcs
+						.map(src => `<label style="display: block; margin: 2px 0; cursor: pointer;">
+							<input type="checkbox" value="${src}" ${excl.has(src) ? "" : "checked"} style="margin-right: 6px;">
+							${Parser.sourceJsonToFull(src)}
+						</label>`)
+						.join("");
+					return name ? `<div class="ve-bold" style="margin-top: 6px;">${name}</div>${items}` : items;
+				})
+				.join("");
+			wrpSrcPanel.vee.html(
+				`<div style="margin-bottom: 6px; text-align: right;">
+					<button type="button" class="stg-src__qsa" style="cursor: pointer; background: none; border: none; text-decoration: underline; padding: 0;">Tutte</button>
+					<span class="ve-muted">/</span>
+					<button type="button" class="stg-src__qsn" style="cursor: pointer; background: none; border: none; text-decoration: underline; padding: 0;">Nessuna</button>
+				</div>
+				${rows}`,
+			);
+		};
+
+		const hkSrc = () => {
+			const excl = this._state.common_srcExcl || [];
+			btnSrc.vee.html(`Fonti${excl.length ? ` (${excl.length})` : ""}`);
+			renderSrcPanel();
+		};
+		this._addHookBase("common_srcExcl", hkSrc);
+		hkSrc();
+
+		let isSrcPanelShown = false;
+		btnSrc.vee.onn("click", () => {
+			isSrcPanelShown = !isSrcPanelShown;
+			wrpSrcPanel.vee.css({display: isSrcPanelShown ? "block" : "none"});
+		});
+		wrpSrcPanel.vee.onn("change", (evt) => {
+			const cb = evt.target;
+			if (cb?.type !== "checkbox") return;
+			const excl = new Set(this._state.common_srcExcl || []);
+			if (cb.checked) excl.delete(cb.value);
+			else excl.add(cb.value);
+			this._state.common_srcExcl = [...excl];
+		});
+		wrpSrcPanel.vee.onn("click", (evt) => {
+			const t = evt.target;
+			if (t?.className === "stg-src__qsa") this._state.common_srcExcl = [];
+			else if (t?.className === "stg-src__qsn") this._state.common_srcExcl = getAllSrcs();
+		});
+		// endregion
+
 		const wrpNav = veT`<div class="ve-flex ve-flex-v-center ve-w-100 ve-mb-3 ve-px-3">
 			${btnPrev}
 			<div class="ve-mx-3 ve-bold ve-flex-v-center">${lblStep}</div>
 			${btnNext}
-			<div class="ve-ml-auto ve-flex-v-center">${btnNew}</div>
+			<div class="ve-ml-auto ve-flex-v-center">${wrpSrc}${btnNew}</div>
 		</div>`;
 
 		const getStep = () => {
@@ -1120,7 +1206,7 @@ export class StatGenUi extends BaseComponent {
 	}
 
 	_render_getClassSection () {
-		const {wrp: selClass} = ComponentUiUtil.getSelSearchable(
+		const {wrp: selClass, setFnFilter: setFnFilterClass} = ComponentUiUtil.getSelSearchable(
 			this,
 			"common_ixClass",
 			{
@@ -1134,6 +1220,12 @@ export class StatGenUi extends BaseComponent {
 				asMeta: true,
 			},
 		);
+
+		const hkClassSrcFilter = () => {
+			setFnFilterClass(ix => ix == null || this._srcIsAllowed(this._classes[ix]));
+		};
+		this._addHookBase("common_srcExcl", hkClassSrcFilter);
+		hkClassSrcFilter();
 
 		const selSubclass = veT`<select class="ve-form-control form-control--minimal"></select>`
 			.vee.onn("change", () => {
@@ -2179,6 +2271,7 @@ export class StatGenUi extends BaseComponent {
 
 			common_characterName: "",
 			common_wizardStep: 1,
+			common_srcExcl: [],
 			common_ixSkillsChosen: [],
 			common_ixSpellsCantrips: [],
 			common_ixSpellsLvl1: [],

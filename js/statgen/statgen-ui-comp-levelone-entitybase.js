@@ -62,11 +62,12 @@ export class StatGenUiRenderLevelOneEntityBase {
 				if (value == null) return true;
 
 				const ent = this._parent[this._propData][value];
-				return this._parent[this._propModalFilter].pageFilter.toDisplay(f, ent);
+				return this._parent._srcIsAllowed(ent) && this._parent[this._propModalFilter].pageFilter.toDisplay(f, ent);
 			});
 		};
 
 		this._parent[this._propModalFilter].pageFilter.filterBox.on(FILTER_BOX_EVNT_VALCHANGE, () => doApplyFilterToSelEntity());
+		this._parent._addHookBase("common_srcExcl", () => doApplyFilterToSelEntity());
 		doApplyFilterToSelEntity();
 
 		const btnFilterForEntity = veT`<button class="ve-btn ve-btn-xs ve-btn-default ve-br-0 ve-pr-2" title="Filter for ${this._title}"><span class="glyphicon glyphicon-filter"></span> Filter</button>`

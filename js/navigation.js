@@ -92,7 +92,7 @@ class NavBar {
 		this._addElement_li({keyPath: [NavBar._CAT_PLAYER], page: "charcreationoptions.html", aText: "Other Character Creation Options"});
 		this._addElement_li({keyPath: [NavBar._CAT_PLAYER], page: "optionalfeatures.html", aText: "Other Options & Features"});
 		this._addElement_divider({keyPath: [NavBar._CAT_PLAYER]});
-		this._addElement_li({keyPath: [NavBar._CAT_PLAYER], page: "statgen.html", aText: "Stat Generator"});
+		this._addElement_li({keyPath: [NavBar._CAT_PLAYER], page: "charGen.html", aText: "<svg viewBox=\"0 0 24 24\" width=\"1.2em\" height=\"1.2em\" fill=\"currentColor\" style=\"vertical-align:-0.2em;margin-right:.35em\"><path d=\"M12 4c3.3 0 6 2.7 6 6v.5L21 8.5l-3.5 4C17 16 14.8 20 12 20s-5-4-5.5-7.5L3 8.5 6 10.5V10c0-3.3 2.7-6 6-6z\"/></svg>CharGen"});
 		this._addElement_divider({keyPath: [NavBar._CAT_PLAYER]});
 		this._addElement_li({keyPath: [NavBar._CAT_PLAYER], page: "lifegen.html", aText: "This Is Your Life"});
 		this._addElement_li({keyPath: [NavBar._CAT_PLAYER], page: "names.html", aText: "Names"});

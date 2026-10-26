@@ -885,7 +885,7 @@
 							"type": "link",
 							"href": {
 								"type": "internal",
-								"path": "statgen.html",
+								"path": "charGen.html",
 								"hash": "pointbuy"
 							},
 							"entry": "Point Buy Calculator."

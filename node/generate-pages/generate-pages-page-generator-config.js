@@ -363,9 +363,9 @@ class _PageGeneratorSearch extends PageGeneratorGeneric {
 
 class _PageGeneratorStatgen extends PageGeneratorGeneric {
 	_filename = "page/template-page-statgen.hbs";
-	_page = "statgen.html";
+	_page = "charGen.html";
 
-	_pageTitle = "Statgen";
+	_pageTitle = "CharGen";
 	_navbarDescription = "Change method on the left, refer to method that appears on the right.";
 
 	_isFontAwesome = true;

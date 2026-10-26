@@ -50,7 +50,7 @@ export class StatGenUiRenderLevelOneEntityBase {
 				fnDisplay: ix => {
 					const r = this._parent[this._propData][ix];
 					if (!r) return "(Unknown)";
-					return `${r.name} ${r.source !== Parser.SRC_PHB ? `[${Parser.sourceJsonToAbv(r.source)}]` : ""}`;
+					return `${r.name} ${r.source ? `[${Parser.sourceJsonToAbv(r.source)}]` : ""}`;
 				},
 				asMeta: true,
 			},

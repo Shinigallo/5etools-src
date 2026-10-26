@@ -1110,7 +1110,8 @@ export class StatGenUi extends BaseComponent {
 			isSrcPanelShown = !isSrcPanelShown;
 			wrpSrcPanel.vee.css({display: isSrcPanelShown ? "block" : "none"});
 		});
-		wrpSrcPanel.vee.onn("change", (evt) => {
+		// "click" al posto di "change": bolliato garantito, cb.checked gia' aggiornato (robusto anche su label)
+		wrpSrcPanel.vee.onn("click", (evt) => {
 			const cb = evt.target;
 			if (cb?.type !== "checkbox") return;
 			const excl = new Set(this._state.common_srcExcl || []);
@@ -1215,7 +1216,7 @@ export class StatGenUi extends BaseComponent {
 				fnDisplay: ix => {
 					const cls = this._classes[ix];
 					if (!cls) return "(None)";
-					return `${cls.name}${cls.source !== Parser.SRC_PHB ? ` [${Parser.sourceJsonToAbv(cls.source)}]` : ""}`;
+					return `${cls.name}${cls.source ? ` [${Parser.sourceJsonToAbv(cls.source)}]` : ""}`;
 				},
 				asMeta: true,
 			},

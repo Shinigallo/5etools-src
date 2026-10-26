@@ -1261,6 +1261,14 @@ export class StatGenUi extends BaseComponent {
 			if (this._state.common_ixSpellsCantrips.length) this._state.common_ixSpellsCantrips = [];
 			if (this._state.common_ixSpellsLvl1.length) this._state.common_ixSpellsLvl1 = [];
 		});
+		this._addHookBase("common_ixRace", (prop) => {
+			if (prop == null || this.isSettingStateFromOverwrite()) return;
+			this._derived_pruneStaleSkills();
+		});
+		this._addHookBase("common_ixBackground", (prop) => {
+			if (prop == null || this.isSettingStateFromOverwrite()) return;
+			this._derived_pruneStaleSkills();
+		});
 
 		const stgNameIpt = veT`<div class="ve-flex-col ve-mt-3">
 			<div class="ve-mb-1">Personaggio</div>
@@ -1293,29 +1301,7 @@ export class StatGenUi extends BaseComponent {
 		const hp = isReady && hd ? hd.number * hd.faces + mods.con : null;
 		const ac = isReady ? 10 + mods.dex : null;
 
-		const skillGroups = [
-			...(this.race?.skillProficiencies || []),
-			...(this.background?.skillProficiencies || []),
-			...((cls?.startingProficiencies || {}).skills || []),
-		];
-		const fixedSkills = new Set();
-		const choosePool = new Set();
-		let chooseCap = 0;
-		skillGroups.forEach(g => {
-			const ch = g.choose;
-			if (ch) {
-				const from = ch.from || (ch.weighted && ch.weighted.from) || [];
-				from.forEach(s => choosePool.add(s));
-				chooseCap += ch.count ?? ch.amount ?? 1;
-			} else {
-				Object.entries(g).forEach(([k, v]) => {
-					if (k === "any") {
-						this._skillsAll.forEach(s => choosePool.add(s.key));
-						chooseCap += v;
-					} else if (v) fixedSkills.add(k);
-				});
-			}
-		});
+		const {fixedSkills, choosePool, chooseCap} = this._derived_getSkillPools();
 
 		const chosenSkills = this._state.common_ixSkillsChosen || [];
 		const skills = this._skillsAll.map(sk => ({
@@ -1335,6 +1321,40 @@ export class StatGenUi extends BaseComponent {
 
 	_derived_getSpellCap (cls) {
 		return StatGenUi._SPELL_CAPS_L1[cls.name] || 0;
+	}
+
+	_derived_getSkillPools () {
+		const skillGroups = [
+			...(this.race?.skillProficiencies || []),
+			...(this.background?.skillProficiencies || []),
+			...((this.klass?.startingProficiencies || {}).skills || []),
+		];
+		const fixedSkills = new Set();
+		const choosePool = new Set();
+		let chooseCap = 0;
+		skillGroups.forEach(g => {
+			// Gruppi misti: skill fissa + choose nello stesso oggetto (5 sfondi SCAG/SatO)
+			Object.entries(g).forEach(([k, v]) => {
+				if (k !== "choose" && k !== "any" && v) fixedSkills.add(k);
+			});
+			if (g.any) {
+				this._skillsAll.forEach(s => choosePool.add(s.key));
+				chooseCap += g.any;
+			}
+			const ch = g.choose;
+			if (ch) {
+				const from = ch.from || (ch.weighted && ch.weighted.from) || [];
+				from.forEach(s => choosePool.add(s));
+				chooseCap += ch.count ?? ch.amount ?? 1;
+			}
+		});
+		return {fixedSkills, choosePool, chooseCap};
+	}
+
+	_derived_pruneStaleSkills () {
+		const {fixedSkills, choosePool} = this._derived_getSkillPools();
+		const kept = (this._state.common_ixSkillsChosen || []).filter(k => fixedSkills.has(k) || choosePool.has(k));
+		if (kept.length !== this._state.common_ixSkillsChosen.length) this._state.common_ixSkillsChosen = kept;
 	}
 
 	_derived_renderDerivedBase (disp, d) {
@@ -1549,7 +1569,7 @@ export class StatGenUi extends BaseComponent {
 			return f.length ? `${nm} [${f.join(",")}]` : String(nm);
 		};
 		const spells = {
-			cantrips: (st.common_ixSpellsCantrips || []).map(String),
+			cantrips: (st.common_ixSpellsCantrips || []).map(spellLabel),
 			lvl1: (st.common_ixSpellsLvl1 || []).map(spellLabel),
 		};
 		return {values, checks, spells};

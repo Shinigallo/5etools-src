@@ -365,7 +365,12 @@
 					]
 				}
 			],
-			"hasFluff": true
+			"hasFluff": true,
+			"ability": [
+				{
+					"cha": 2
+				}
+			]
 		},
 		{
 			"name": "Acolyte",
@@ -4161,7 +4166,13 @@
 					]
 				}
 			],
-			"hasFluff": true
+			"hasFluff": true,
+			"ability": [
+				{
+					"cha": 2,
+					"int": 1
+				}
+			]
 		},
 		{
 			"name": "Charlatan",
@@ -5243,7 +5254,12 @@
 					]
 				}
 			],
-			"hasFluff": true
+			"hasFluff": true,
+			"ability": [
+				{
+					"dex": 2
+				}
+			]
 		},
 		{
 			"name": "Criminal",
@@ -6736,7 +6752,13 @@
 					]
 				}
 			],
-			"hasFluff": true
+			"hasFluff": true,
+			"ability": [
+				{
+					"cha": 2,
+					"dex": 1
+				}
+			]
 		},
 		{
 			"name": "Entertainer",
@@ -9212,7 +9234,13 @@
 					]
 				}
 			],
-			"hasFluff": true
+			"hasFluff": true,
+			"ability": [
+				{
+					"con": 2,
+					"wis": 1
+				}
+			]
 		},
 		{
 			"name": "Gambler",
@@ -11630,7 +11658,13 @@
 					]
 				}
 			],
-			"hasFluff": true
+			"hasFluff": true,
+			"ability": [
+				{
+					"int": 2,
+					"wis": 1
+				}
+			]
 		},
 		{
 			"name": "Harper",
@@ -12583,7 +12617,13 @@
 					]
 				}
 			],
-			"hasFluff": true
+			"hasFluff": true,
+			"ability": [
+				{
+					"wis": 2,
+					"int": 1
+				}
+			]
 		},
 		{
 			"name": "Hermit",
@@ -18660,7 +18700,13 @@
 					]
 				}
 			],
-			"hasFluff": true
+			"hasFluff": true,
+			"ability": [
+				{
+					"cha": 2,
+					"int": 1
+				}
+			]
 		},
 		{
 			"name": "Noble",
@@ -19504,7 +19550,13 @@
 					]
 				}
 			],
-			"hasFluff": true
+			"hasFluff": true,
+			"ability": [
+				{
+					"str": 2,
+					"wis": 1
+				}
+			]
 		},
 		{
 			"name": "Phantasmic Circus Trouper",
@@ -22597,7 +22649,13 @@
 					]
 				}
 			],
-			"hasFluff": true
+			"hasFluff": true,
+			"ability": [
+				{
+					"int": 2,
+					"cha": 1
+				}
+			]
 		},
 		{
 			"name": "Sage",
@@ -22956,7 +23014,13 @@
 					]
 				}
 			],
-			"hasFluff": true
+			"hasFluff": true,
+			"ability": [
+				{
+					"str": 2,
+					"con": 1
+				}
+			]
 		},
 		{
 			"name": "Sailor",
@@ -25560,7 +25624,13 @@
 					]
 				}
 			],
-			"hasFluff": true
+			"hasFluff": true,
+			"ability": [
+				{
+					"str": 2,
+					"con": 1
+				}
+			]
 		},
 		{
 			"name": "Soldier",
@@ -26252,7 +26322,13 @@
 					]
 				}
 			],
-			"hasFluff": true
+			"hasFluff": true,
+			"ability": [
+				{
+					"dex": 2,
+					"int": 1
+				}
+			]
 		},
 		{
 			"name": "Uthgardt Tribe Member",
@@ -26695,7 +26771,13 @@
 					}
 				}
 			},
-			"hasFluff": true
+			"hasFluff": true,
+			"ability": [
+				{
+					"dex": 2,
+					"cha": 1
+				}
+			]
 		},
 		{
 			"name": "Variant Entertainer (Gladiator)",

@@ -4182,11 +4182,6 @@
 			"traitTags": [
 				"Improved Resting"
 			],
-			"skillProficiencies": [
-				{
-					"perception": true
-				}
-			],
 			"languageProficiencies": [
 				{
 					"common": true,
@@ -7229,17 +7224,7 @@
 			"speed": 30,
 			"ability": [
 				{
-					"cha": 2,
-					"choose": {
-						"from": [
-							"str",
-							"dex",
-							"con",
-							"int",
-							"wis"
-						],
-						"count": 2
-					}
+					"cha": 2
 				}
 			],
 			"heightAndWeight": {
@@ -7255,11 +7240,6 @@
 			"darkvision": 60,
 			"traitTags": [
 				"Uncommon Race"
-			],
-			"skillProficiencies": [
-				{
-					"any": 2
-				}
 			],
 			"languageProficiencies": [
 				{
@@ -7347,11 +7327,6 @@
 			"darkvision": 60,
 			"traitTags": [
 				"Uncommon Race"
-			],
-			"skillProficiencies": [
-				{
-					"intimidation": true
-				}
 			],
 			"languageProficiencies": [
 				{
@@ -7499,7 +7474,20 @@
 				}
 			],
 			"hasFluff": true,
-			"hasFluffImages": true
+			"hasFluffImages": true,
+			"skillProficiencies": [
+				{
+					"choose": {
+						"from": [
+							"acrobatics",
+							"perception",
+							"sleight of hand",
+							"stealth"
+						],
+						"count": 2
+					}
+				}
+			]
 		},
 		{
 			"name": "Halfling",
@@ -8163,6 +8151,11 @@
 				"M"
 			],
 			"speed": 30,
+			"ability": [
+				{
+					"con": 1
+				}
+			],
 			"heightAndWeight": {
 				"baseHeight": 56,
 				"heightMod": "2d10",
@@ -15968,7 +15961,12 @@
 				}
 			],
 			"hasFluff": true,
-			"hasFluffImages": true
+			"hasFluffImages": true,
+			"skillProficiencies": [
+				{
+					"history": true
+				}
+			]
 		},
 		{
 			"name": "Mark of Warding",
@@ -16214,7 +16212,12 @@
 					]
 				}
 			],
-			"hasFluff": true
+			"hasFluff": true,
+			"skillProficiencies": [
+				{
+					"perception": true
+				}
+			]
 		},
 		{
 			"name": "Eladrin",
@@ -16405,7 +16408,12 @@
 				"languageProficiencies": true
 			},
 			"hasFluff": true,
-			"hasFluffImages": true
+			"hasFluffImages": true,
+			"skillProficiencies": [
+				{
+					"perception": true
+				}
+			]
 		},
 		{
 			"name": "Mark of Shadow",
@@ -16764,7 +16772,13 @@
 				}
 			],
 			"hasFluff": true,
-			"hasFluffImages": true
+			"hasFluffImages": true,
+			"skillProficiencies": [
+				{
+					"perception": true,
+					"survival": true
+				}
+			]
 		},
 		{
 			"name": "Bishatar and Tirahar",
@@ -17902,7 +17916,12 @@
 				}
 			],
 			"hasFluff": true,
-			"hasFluffImages": true
+			"hasFluffImages": true,
+			"skillProficiencies": [
+				{
+					"perception": true
+				}
+			]
 		},
 		{
 			"name": "Mark of Scribing",
@@ -18090,7 +18109,13 @@
 				}
 			],
 			"hasFluff": true,
-			"hasFluffImages": true
+			"hasFluffImages": true,
+			"skillProficiencies": [
+				{
+					"arcana": true,
+					"history": true
+				}
+			]
 		},
 		{
 			"name": "Ixalan",
@@ -19158,7 +19183,12 @@
 				}
 			],
 			"hasFluff": true,
-			"hasFluffImages": true
+			"hasFluffImages": true,
+			"skillProficiencies": [
+				{
+					"perception": true
+				}
+			]
 		},
 		{
 			"name": "Lotusden",
@@ -20133,11 +20163,6 @@
 				}
 			],
 			"feats": [
-				{
-					"any": 1
-				}
-			],
-			"skillProficiencies": [
 				{
 					"any": 1
 				}

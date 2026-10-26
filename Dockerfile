@@ -1,3 +1,3 @@
-FROM ghcr.io/5etools-mirror-3/5etools-img:latest
+FROM nginx:1.27-alpine
 
-COPY . /var/www/localhost/htdocs/
+COPY . /usr/share/nginx/html/

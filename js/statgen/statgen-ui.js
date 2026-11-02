@@ -1269,7 +1269,7 @@ export class StatGenUi extends BaseComponent {
 			const sc = this.subclass;
 
 			dispClassInfo.vee.html(
-				`<div class="ve-mb-1"><b>${cls.name}</b>${sc ? ` / <b>${sc.name}</b>` : ""}${cls.source !== Parser.SRC_PHB ? ` <span class="ve-muted">[${Parser.sourceJsonToAbv(cls.source)}]</span>` : ""}</div>` +
+				`<div class="ve-mb-1"><b>${cls.name}</b>${sc ? ` / <b>${sc.name}</b>` : ""}${cls.source ? ` <span class="ve-muted">[${Parser.sourceJsonToAbv(cls.source)}]</span>` : ""}</div>` +
 				`<div class="ve-small">Dado di vita: <b>${hd}</b> &middot; Salvaguardie: <b>${saves || "?"}</b> &middot; ${caster}</div>`,
 			);
 		};

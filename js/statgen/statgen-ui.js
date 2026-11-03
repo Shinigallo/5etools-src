@@ -1235,16 +1235,19 @@ export class StatGenUi extends BaseComponent {
 			});
 
 		const hkSubclassOptions = () => {
+			const cls = this.klass;
+			const iSel = this._state.common_ixSubclass;
+
 			selSubclass.vee.empty();
 			veE({tag: "option", value: -1, txt: "\u2014"}).vee.appendTo(selSubclass);
 
-			const cls = this.klass;
 			(cls?.subclasses || []).forEach((sc, ix) => {
+				// La selezione corrente resta visibile anche se la sua fonte viene esclusa
+				if (ix !== iSel && !this._srcIsAllowed(sc)) return;
 				veE({tag: "option", value: ix, txt: sc.name}).vee.appendTo(selSubclass);
 			});
 
-			const ix = this._state.common_ixSubclass == null ? -1 : this._state.common_ixSubclass;
-			selSubclass.vee.val(`${ix}`);
+			selSubclass.vee.val(`${iSel == null ? -1 : iSel}`);
 		};
 
 		this._addHookBase("common_ixClass", (prop) => {
@@ -1253,6 +1256,7 @@ export class StatGenUi extends BaseComponent {
 		});
 		this._addHookBase("common_ixClass", hkSubclassOptions);
 		this._addHookBase("common_ixSubclass", hkSubclassOptions);
+		this._addHookBase("common_srcExcl", hkSubclassOptions);
 		hkSubclassOptions();
 
 		const dispClassInfo = veT`<div class="ve-flex-col ve-mb-2"></div>`;

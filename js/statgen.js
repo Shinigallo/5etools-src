@@ -1,8 +1,16 @@
+import "./filter.js";
+import "./filter-common.js";
+import "./filter-races.js";
+import "./filter-backgrounds.js";
+import "./filter-feats.js";
 import {StatGenUi} from "./statgen/statgen-ui.js";
 import {VetoolsConfig} from "./utils-config/utils-config-config.js";
 import {UtilsEntityBackground} from "./utils/utils-entity-background.js";
 import {UtilsEntityRace} from "./utils/utils-entity-race.js";
 import {SITE_STYLE__CLASSIC} from "./consts.js";
+import {createCompanionRecord} from "./statgen/companion-record.js";
+import {migrate, slotsFor} from "./statgen/companion-advancement.js";
+import {advanceRandomCharacter} from "./statgen/statgen-random.js";
 
 class StatGenPage {
 	constructor () {
@@ -32,6 +40,7 @@ class StatGenPage {
 			classes,
 			skills,
 			classSpells,
+			pFnCreateRandomCompanion: level => this._openCompanion(level),
 			tabMetasAdditional: this._getAdditionalTabMetas(),
 		});
 		await this._statGenUi.pInit();
@@ -120,7 +129,7 @@ class StatGenPage {
 				buttons: [
 					{
 						html: `<span class="glyphicon glyphicon-file"></span>`,
-						title: "Copia Scheda",
+						title: "Copy Character Sheet",
 						pFnClick: async ({btn}) => {
 							await MiscUtil.pCopyTextToClipboard(this._statGenUi.getSheetText());
 							JqueryUtil.showCopiedEffect(btn);
@@ -133,15 +142,68 @@ class StatGenPage {
 				buttons: [
 					{
 						html: `<span class="glyphicon glyphicon-save"></span>`,
-						title: "Scarica Scheda (JSON)",
+						title: "Download Character Sheet (JSON)",
 						pFnClick: () => {
-							// fileType != "statgen" per non mescolarsi a "Load from File" (la scheda e' un record, non uno stato salvabile)
-							DataUtil.userDownload("scheda-personaggio", this._statGenUi.getSheetExport(), {fileType: "scheda"});
+							// Keep the existing sheet file type separate from the StatGen save state.
+							DataUtil.userDownload("character-sheet", this._statGenUi.getSheetExport(), {fileType: "scheda"});
 						},
 					},
 				],
 			}),
+			new TabUiUtil.TabMeta({
+				type: "buttons",
+				buttons: [{
+					html: `Open in Companion`,
+					title: "Open in Companion",
+					pFnClick: () => this._openCompanion(),
+				}],
+			}),
 		];
+	}
+
+	async _openCompanion (level = 1) {
+		const key = "dnd-companion-5etools-v1";
+		const id = this._statGenUi.state.common_companionId;
+		let records;
+		try {
+			records = JSON.parse(localStorage.getItem(key) || "[]");
+			if (!Array.isArray(records) || records.some(r => typeof r?.companion?.id !== "string" || !r.companion.id)
+				|| new Set(records.map(r => r.companion.id)).size !== records.length) throw Error("Companion saved data cannot be read.");
+		} catch (error) {
+			JqueryUtil.doToast({type: "danger", content: `Companion unavailable: ${error.message}. Download the character sheet JSON and import it manually.`});
+			return;
+		}
+
+		if (!id || !records.some(r => r.companion.id === id)) {
+			let record;
+			try {
+				const exported = {...this._statGenUi.getSheetExport(), fileType: "scheda"};
+				record = createCompanionRecord(exported, this._statGenUi.klass, id || crypto.randomUUID());
+				migrate(record.companion);
+				if (level > 1) advanceRandomCharacter(record, this._statGenUi.klass, level,
+					(this._statGenUi.klass.subclasses || []).filter(subclass => this._statGenUi._srcIsAllowed(subclass) && subclass.edition !== "one"));
+				const progression = slotsFor(record.companion, [this._statGenUi.klass], []);
+				record.companion.slots = progression.slots;
+				record.companion.pact = {...progression.pact, spent: 0};
+			} catch (error) {
+				JqueryUtil.doToast({type: "danger", content: error.message});
+				return;
+			}
+			try {
+				localStorage.setItem(key, JSON.stringify([...records, record]));
+			} catch (error) {
+				JqueryUtil.doToast({type: "danger", content: "Browser storage unavailable. Download the character sheet JSON and import it into Companion."});
+				return;
+			}
+			this._statGenUi.state.common_companionId = record.companion.id;
+		} else JqueryUtil.doToast({type: "info", content: "Character already exists; the Companion record was not overwritten."});
+		try {
+			await this._pDoSaveState();
+		} catch (error) {
+			JqueryUtil.doToast({type: "danger", content: "Unable to save the character link. Stay in CharGen and download a copy of the character sheet JSON."});
+			return;
+		}
+		window.location.href = new URL("companion.html", window.location.href).href;
 	}
 
 	async _pDoSaveState () {
@@ -162,7 +224,7 @@ class StatGenPage {
 				}),
 		);
 
-		// PG da scheda 2014: i bonus di razza devono restare attivi (no migrazione 2024)
+		// Preserve 2014 racial ability bonuses; do not migrate to 2024 rules.
 		const styleHint = SITE_STYLE__CLASSIC;
 		cpyRaces.forEach(ent => UtilsEntityRace.mutMigrateForVersion(ent, {styleHint}));
 

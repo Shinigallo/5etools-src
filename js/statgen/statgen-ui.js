@@ -5,6 +5,7 @@ import {StatGenUiRenderableCollectionPbRules} from "./statgen-ui-comp-pbrules.js
 import {MAX_CUSTOM_FEATS, MODE_NONE} from "./statgen-ui-consts.js";
 import {VetoolsConfig} from "../utils-config/utils-config-config.js";
 import {SITE_STYLE__ONE} from "../consts.js";
+import {randomSkills} from "./statgen-random.js";
 
 export class StatGenUi extends BaseComponent {
 	static _STANDARD_ARRAY = [15, 14, 13, 12, 10, 8];
@@ -24,7 +25,7 @@ export class StatGenUi extends BaseComponent {
 	];
 
 	static _SPELL_CAPS_L1 = {
-		// PHB 2014, incantesimi di 1° livello noti/preparati a livello 1
+		// PHB 2014, 1st-level spells known/prepared at character level 1
 		Artificer: 2, // TCE
 		Bard: 4,
 		Cleric: 3,
@@ -70,6 +71,7 @@ export class StatGenUi extends BaseComponent {
 		this._classes = opts.classes || [];
 		this._skillsAll = opts.skills || [];
 		this._classSpells = opts.classSpells || {};
+		this._pFnCreateRandomCompanion = opts.pFnCreateRandomCompanion;
 		this._tabMetasAdditional = opts.tabMetasAdditional;
 		this._isCharacterMode = opts.isCharacterMode;
 		this._isFvttMode = opts.isFvttMode;
@@ -451,7 +453,7 @@ export class StatGenUi extends BaseComponent {
 		this._proxyAssignSimple("state", this._getDefaultState(), true);
 	}
 
-	// Fonti escluse dal wizard (razze/sfondi/classi); vuoto = tutte incluse
+	// Sources excluded from the wizard; empty means all are included.
 	_srcIsAllowed (ent) {
 		const excl = this._state.common_srcExcl;
 		return !excl?.length || !excl.includes(ent?.source);
@@ -944,7 +946,7 @@ export class StatGenUi extends BaseComponent {
 			<div class="ve-flex-v-center"><i>Please select a mode.</i></div>
 		</div>`;
 
-		// region Wizard: 8 passi con navigazione
+		// region Wizard: eight navigation steps
 		const wrpStep1 = veT`<div class="ve-flex-col ve-w-100">
 			${stgNameIpt}
 			${stgRaceSel}
@@ -1031,23 +1033,25 @@ export class StatGenUi extends BaseComponent {
 		const wrpSteps = [wrpStep1, wrpStep2, wrpStep3, wrpStep4, wrpStep5, wrpStep6, wrpStep7, wrpStep8];
 
 		const STEP_TITLES = [
-			"Nome e razza",
-			"Sfondo",
-			"Punteggi di abilità",
-			"Classe e sottoclasse",
-			"Abilità",
-			"Incantesimi",
-			"Scheda finale",
-			"Scheda ufficiale",
+			"Name and species",
+			"Background",
+			"Ability scores",
+			"Class and subclass",
+			"Skills",
+			"Spells",
+			"Character summary",
+			"Official character sheet",
 		];
 
-		const btnPrev = veT`<button class="ve-btn ve-btn-default">&larr; Indietro</button>`;
-		const btnNext = veT`<button class="ve-btn ve-btn-default">Avanti &rarr;</button>`;
-		const btnNew = veT`<button class="ve-btn ve-btn-default">Nuovo personaggio</button>`;
+		const btnPrev = veT`<button class="ve-btn ve-btn-default">&larr; Back</button>`;
+		const btnNext = veT`<button class="ve-btn ve-btn-default">Next &rarr;</button>`;
+		const btnNew = veT`<button class="ve-btn ve-btn-default">New character</button>`;
+		const btnRandomCharacter = veT`<button class="ve-btn ve-btn-default ve-mr-2">Create random character</button>`;
+		const selRandomLevel = veT`<select class="ve-form-control form-control--minimal">${Array.from({length: 20}, (_, ix) => `<option value="${ix + 1}">${ix + 1}</option>`).join("")}</select>`;
 		const lblStep = veT`<span></span>`;
 
-		// region Filtro fonti (include/esclude libri, come nei filtri delle pagine)
-		const btnSrc = veT`<button class="ve-btn ve-btn-default ve-mr-2">Fonti</button>`;
+		// region Source filter
+		const btnSrc = veT`<button class="ve-btn ve-btn-default ve-mr-2">Sources</button>`;
 		const wrpSrcPanel = veT`<div style="display: none; position: absolute; top: 100%; right: 0; z-index: 100; background: #fff; border: 1px solid #ccc; box-shadow: 0 2px 8px rgba(0, 0, 0, .25); padding: 8px; width: 280px; max-height: 420px; overflow-y: auto; text-align: left;"></div>`;
 		const wrpSrc = veT`<div style="position: relative; display: inline-flex;">
 			${btnSrc}
@@ -1059,6 +1063,8 @@ export class StatGenUi extends BaseComponent {
 				...this._races,
 				...this._backgrounds,
 				...this._classes,
+				...this._classes.flatMap(klass => klass.subclasses || []),
+				...Object.values(this._classSpells).flatMap(group => [...(group.cantrips || []), ...(group.lvl1 || [])]),
 			].map(it => it.source).filter(Boolean),
 		)];
 
@@ -1067,7 +1073,7 @@ export class StatGenUi extends BaseComponent {
 			getAllSrcs().forEach(src => {
 				(groups[SourceUtil.getFilterGroup(src)] ||= []).push(src);
 			});
-			// Le chiavi 0..4 vengono iterate in ordine crescente: Standard, Partnered, Other, Prerelease, Homebrew
+			// Numeric keys 0..4 iterate in order: Standard, Partnered, Other, Prerelease, Homebrew.
 			return Object.entries(groups).map(([g, list]) => ({
 				name: SourceUtil.getFilterGroupName(Number(g)),
 				srcs: list.sort((a, b) => Parser.sourceJsonToFull(a).localeCompare(Parser.sourceJsonToFull(b))),
@@ -1089,9 +1095,9 @@ export class StatGenUi extends BaseComponent {
 				.join("");
 			wrpSrcPanel.vee.html(
 				`<div style="margin-bottom: 6px; text-align: right;">
-					<button type="button" class="stg-src__qsa" style="cursor: pointer; background: none; border: none; text-decoration: underline; padding: 0;">Tutte</button>
+					<button type="button" class="stg-src__qsa" style="cursor: pointer; background: none; border: none; text-decoration: underline; padding: 0;">All</button>
 					<span class="ve-muted">/</span>
-					<button type="button" class="stg-src__qsn" style="cursor: pointer; background: none; border: none; text-decoration: underline; padding: 0;">Nessuna</button>
+					<button type="button" class="stg-src__qsn" style="cursor: pointer; background: none; border: none; text-decoration: underline; padding: 0;">None</button>
 				</div>
 				${rows}`,
 			);
@@ -1099,7 +1105,7 @@ export class StatGenUi extends BaseComponent {
 
 		const hkSrc = () => {
 			const excl = this._state.common_srcExcl || [];
-			btnSrc.vee.html(`Fonti${excl.length ? ` (${excl.length})` : ""}`);
+			btnSrc.vee.html(`Sources${excl.length ? ` (${excl.length})` : ""}`);
 			renderSrcPanel();
 		};
 		this._addHookBase("common_srcExcl", hkSrc);
@@ -1110,7 +1116,7 @@ export class StatGenUi extends BaseComponent {
 			isSrcPanelShown = !isSrcPanelShown;
 			wrpSrcPanel.vee.css({display: isSrcPanelShown ? "block" : "none"});
 		});
-		// "click" al posto di "change": bolliato garantito, cb.checked gia' aggiornato (robusto anche su label)
+		// Click also handles checkbox changes via the label.
 		wrpSrcPanel.vee.onn("click", (evt) => {
 			const cb = evt.target;
 			if (cb?.type !== "checkbox") return;
@@ -1126,11 +1132,11 @@ export class StatGenUi extends BaseComponent {
 		});
 		// endregion
 
-		const wrpNav = veT`<div class="ve-flex ve-flex-v-center ve-w-100 ve-mb-3 ve-px-3">
+		const wrpNav = veT`<div class="ve-flex ve-flex-wrap ve-flex-v-center ve-w-100 ve-mb-3 ve-px-3">
 			${btnPrev}
 			<div class="ve-mx-3 ve-bold ve-flex-v-center">${lblStep}</div>
 			${btnNext}
-			<div class="ve-ml-auto ve-flex-v-center">${wrpSrc}${btnNew}</div>
+			<div class="ve-ml-auto ve-flex ve-flex-wrap ve-flex-v-center">${wrpSrc}<label class="ve-flex-v-center ve-mr-2">Level ${selRandomLevel}</label>${btnRandomCharacter}${btnNew}</div>
 		</div>`;
 
 		const getStep = () => {
@@ -1140,15 +1146,15 @@ export class StatGenUi extends BaseComponent {
 
 		const canAdvance = (step) => {
 			switch (step) {
-				case 1: return this.race != null ? null : "Seleziona una razza";
-				case 2: return this.background != null ? null : "Seleziona uno sfondo";
+				case 1: return this.race != null ? null : "Choose a species";
+				case 2: return this.background != null ? null : "Choose a background";
 				case 3: return Parser.ABIL_ABVS.every(ab => this._state[`common_export_${ab}`] != null)
-					? null : "Completa i punteggi di abilità";
-				case 4: return this.klass != null ? null : "Seleziona una classe";
+					? null : "Complete the ability scores";
+				case 4: return this.klass != null ? null : "Choose a class";
 				case 5: {
 					const cntChosen = (this._state.common_ixSkillsChosen || []).length;
 					const cap = this._derived_getData().chooseCap;
-					return cntChosen >= cap ? null : `Scegli ancora ${cap - cntChosen} abilità`;
+					return cntChosen >= cap ? null : `Choose ${cap - cntChosen} more skills`;
 				}
 				default: return null;
 			}
@@ -1157,7 +1163,7 @@ export class StatGenUi extends BaseComponent {
 		const hkWizard = () => {
 			const step = getStep();
 			wrpSteps.forEach((wrp, i) => wrp.vee.toggle(i + 1 === step));
-			lblStep.vee.html(`Passo ${step}/8: ${STEP_TITLES[step - 1]}`);
+			lblStep.vee.html(`Step ${step}/8: ${STEP_TITLES[step - 1]}`);
 			btnPrev.vee.attr("disabled", step <= 1);
 			const reason = step >= 8 ? null : canAdvance(step);
 			btnNext.vee.attr("disabled", step >= 8 || reason != null);
@@ -1179,8 +1185,48 @@ export class StatGenUi extends BaseComponent {
 			this._state.common_wizardStep = step + 1;
 		});
 		btnNew.vee.onn("click", () => {
-			if (!confirm("Azzerare tutti i dati del personaggio e ricominciare dal primo passo?")) return;
+			if (!confirm("Clear this character and start again from the first step?")) return;
 			this.doResetAll();
+		});
+		btnRandomCharacter.vee.onn("click", async () => {
+			const level = Number(selRandomLevel.vee.val());
+			if (!Number.isInteger(level) || level < 1 || level > 20) { alert("Choose a level from 1 to 20."); return; }
+			const pick = values => values[Math.floor(Math.random() * values.length)];
+			const subclassLevel = klass => (klass.classFeatures || []).flatMap((entry, ix) => Array.isArray(entry)
+				? entry.filter(feature => feature.gainSubclassFeature).map(() => ix + 1)
+				: entry.gainSubclassFeature ? [Number(entry.classFeature?.split("|")[3])] : []).find(Boolean);
+			const races = this._races.map((race, ix) => ({race, ix})).filter(({race}) => this._srcIsAllowed(race) && race.edition !== "one" && !race.ability?.some(set => set.choose));
+			const backgrounds = this._backgrounds.map((background, ix) => ({background, ix})).filter(({background}) => this._srcIsAllowed(background) && background.edition !== "one" && !background.ability?.some(set => set.choose));
+			const classes = this._classes.map((klass, ix) => ({klass, ix})).filter(({klass}) => this._srcIsAllowed(klass) && ["PHB", "TCE"].includes(klass.source) && klass.edition !== "one" && klass.hd?.faces && klass.startingProficiencies
+				&& (!(subclassLevel(klass) <= level) || klass.subclasses?.some(subclass => this._srcIsAllowed(subclass) && subclass.edition !== "one"))
+				&& (!this._classSpells[klass.name] || [
+					[this._classSpells[klass.name].cantrips, klass.cantripProgression?.[0] || 0],
+					[this._classSpells[klass.name].lvl1, this._derived_getSpellCap(klass)],
+				].every(([spells, cap]) => spells.filter(spell => this._srcIsAllowed(spell) && spell.edition !== "one").length >= cap)));
+			if (!races.length || !backgrounds.length || !classes.length) { alert("The selected sources do not provide enough options. Adjust the Sources filter."); return; }
+			const excluded = [...this._state.common_srcExcl];
+			const {race, ix: ixRace} = pick(races), {background, ix: ixBackground} = pick(backgrounds), {klass, ix: ixClass} = pick(classes);
+			const chosenSkills = randomSkills([
+				...(race.skillProficiencies || []), ...(background.skillProficiencies || []), ...((klass.startingProficiencies || {}).skills || []),
+			], this._skillsAll.map(skill => skill.key));
+			if (!chosenSkills) { alert("This combination has too few available skills. Try again."); return; }
+			if (!confirm(`Replace the current character with a random level ${level} character? Unsaved changes will be lost.`)) return;
+			this.doResetAll();
+			this._state.common_srcExcl = excluded;
+			this.ixActiveTab = this._IX_TAB_ARRAY;
+			this._state.common_characterName = "Random character";
+			this._state.common_ixRace = ixRace;
+			this._state.common_ixBackground = ixBackground;
+			this._state.common_ixClass = ixClass;
+			const subclasses = (klass.subclasses || []).map((subclass, ix) => ({subclass, ix})).filter(({subclass}) => this._srcIsAllowed(subclass) && subclass.edition !== "one");
+			if (subclasses.length && subclassLevel(klass) === 1) this._state.common_ixSubclass = pick(subclasses).ix;
+			[...Parser.ABIL_ABVS].shuffle().forEach((ab, ix) => { this._state[this.constructor._array_getProps(ab).propAbilSelectedScoreIx] = ix; });
+			const {classSpells, cantripCap, spellCap} = this._derived_getData();
+			this._state.common_ixSkillsChosen = chosenSkills;
+			this._state.common_ixSpellsCantrips = (classSpells?.cantrips || []).filter(spell => this._srcIsAllowed(spell) && spell.edition !== "one").map(spell => spell.name).shuffle().slice(0, cantripCap);
+			this._state.common_ixSpellsLvl1 = (classSpells?.lvl1 || []).filter(spell => this._srcIsAllowed(spell) && spell.edition !== "one").map(spell => spell.name).shuffle().slice(0, spellCap);
+			this._state.common_wizardStep = 7;
+			if (level > 1) await this._pFnCreateRandomCompanion(level);
 		});
 		// endregion
 
@@ -1242,7 +1288,7 @@ export class StatGenUi extends BaseComponent {
 			veE({tag: "option", value: -1, txt: "\u2014"}).vee.appendTo(selSubclass);
 
 			(cls?.subclasses || []).forEach((sc, ix) => {
-				// La selezione corrente resta visibile anche se la sua fonte viene esclusa
+				// Keep the current selection visible even if its source is excluded.
 				if (ix !== iSel && !this._srcIsAllowed(sc)) return;
 				veE({tag: "option", value: ix, txt: sc.name}).vee.appendTo(selSubclass);
 			});
@@ -1269,12 +1315,12 @@ export class StatGenUi extends BaseComponent {
 
 			const hd = cls.hd ? `${cls.hd.number}d${cls.hd.faces}` : "?";
 			const saves = (cls.proficiency || []).map(ab => Parser.attAbvToFull(ab)).join(", ");
-			const caster = cls.spellcastingAbility ? `Lancia magie (${Parser.attAbvToFull(cls.spellcastingAbility)})` : "Non lancia magie";
+			const caster = cls.spellcastingAbility ? `Spellcasting (${Parser.attAbvToFull(cls.spellcastingAbility)})` : "No spellcasting";
 			const sc = this.subclass;
 
 			dispClassInfo.vee.html(
 				`<div class="ve-mb-1"><b>${cls.name}</b>${sc ? ` / <b>${sc.name}</b>` : ""}${cls.source ? ` <span class="ve-muted">[${Parser.sourceJsonToAbv(cls.source)}]</span>` : ""}</div>` +
-				`<div class="ve-small">Dado di vita: <b>${hd}</b> &middot; Salvaguardie: <b>${saves || "?"}</b> &middot; ${caster}</div>`,
+				`<div class="ve-small">Hit die: <b>${hd}</b> &middot; Saving throws: <b>${saves || "?"}</b> &middot; ${caster}</div>`,
 			);
 		};
 		this._addHookBase("common_ixClass", hkClassInfo);
@@ -1282,10 +1328,10 @@ export class StatGenUi extends BaseComponent {
 		hkClassInfo();
 
 		const stgClassSel = veT`<div class="ve-flex-col ve-mt-3">
-			<div class="ve-mb-1">Classe</div>
+			<div class="ve-mb-1">Class</div>
 			<div class="ve-flex-v-center ve-mb-2">${selClass}</div>
 			<div class="ve-flex-v-center ve-mb-2">
-				<div class="ve-mr-2 ve-no-wrap">Sottoclasse</div>
+				<div class="ve-mr-2 ve-no-wrap">Subclass</div>
 				<div>${selSubclass}</div>
 			</div>
 		</div>`;
@@ -1294,12 +1340,12 @@ export class StatGenUi extends BaseComponent {
 	}
 
 	_render_getDerivedSection () {
-		const iptName = veT`<input class="ve-form-control form-control--minimal" type="text" placeholder="Nome del personaggio">`;
+		const iptName = veT`<input class="ve-form-control form-control--minimal" type="text" placeholder="Character name">`;
 		iptName.vee.val(this._state.common_characterName || "");
 		iptName.vee.onn("change", () => {
 			this._state.common_characterName = iptName.vee.val();
 		});
-		// Sync del DOM su reset ("Nuovo personaggio") e load di stato
+		// Sync the input after reset and state restoration.
 		this._addHookBase("common_characterName", () => {
 			const v = this._state.common_characterName || "";
 			if (iptName.vee.val() !== v) iptName.vee.val(v);
@@ -1368,7 +1414,7 @@ export class StatGenUi extends BaseComponent {
 		});
 
 		const stgNameIpt = veT`<div class="ve-flex-col ve-mt-3">
-			<div class="ve-mb-1">Personaggio</div>
+			<div class="ve-mb-1">Character</div>
 			${iptName}
 		</div>`;
 
@@ -1417,6 +1463,11 @@ export class StatGenUi extends BaseComponent {
 	}
 
 	_derived_getSpellCap (cls) {
+		if (["Artificer", "Cleric", "Druid"].includes(cls.name)) {
+			const ability = cls.name === "Artificer" ? "int" : "wis";
+			const score = this._state[`common_export_${ability}`];
+			if (score != null) return Math.max(1, Math.floor((score - 10) / 2) + (cls.name === "Artificer" ? 0 : 1));
+		}
 		return StatGenUi._SPELL_CAPS_L1[cls.name] || 0;
 	}
 
@@ -1430,7 +1481,7 @@ export class StatGenUi extends BaseComponent {
 		const choosePool = new Set();
 		let chooseCap = 0;
 		skillGroups.forEach(g => {
-			// Gruppi misti: skill fissa + choose nello stesso oggetto (5 sfondi SCAG/SatO)
+			// Mixed groups can contain both a fixed skill and a choice.
 			Object.entries(g).forEach(([k, v]) => {
 				if (k !== "choose" && k !== "any" && v) fixedSkills.add(k);
 			});
@@ -1456,11 +1507,11 @@ export class StatGenUi extends BaseComponent {
 
 	_derived_renderDerivedBase (disp, d) {
 		if (!d.cls) {
-			disp.vee.html(`<div class="ve-small ve-muted">Seleziona una classe per vedere i valori derivati.</div>`);
+			disp.vee.html(`<div class="ve-small ve-muted">Choose a class to see derived values.</div>`);
 			return;
 		}
 		if (!d.isReady) {
-			disp.vee.html(`<div class="ve-small ve-muted">I valori derivati vengono calcolati quando i punteggi sono definiti.</div>`);
+			disp.vee.html(`<div class="ve-small ve-muted">Derived values are calculated once ability scores are set.</div>`);
 			return;
 		}
 
@@ -1473,12 +1524,12 @@ export class StatGenUi extends BaseComponent {
 			<td class="ve-text-center"><b>${fmt(s.total)}</b></td>
 		</tr>`).join("");
 
-		disp.vee.html(`<div class="ve-mb-1"><b>Valori derivati</b></div>
+		disp.vee.html(`<div class="ve-mb-1"><b>Derived values</b></div>
 			<div class="ve-mb-2">
-				<span class="ve-mr-3">Punti vita: <b>${d.hp}</b></span>
-				<span>Classe armatura: <b>${d.ac}</b> <span class="ve-muted ve-small">(senza armatura)</span></span>
+				<span class="ve-mr-3">Hit points: <b>${d.hp}</b></span>
+				<span>Armor class: <b>${d.ac}</b> <span class="ve-muted ve-small">(unarmored)</span></span>
 			</div>
-			<div class="ve-mb-1">Salvaguardie</div>
+			<div class="ve-mb-1">Saving throws</div>
 			<table class="ve-table ve-small ve-w-50">
 				<tbody>${savesHtml}</tbody>
 			</table>`);
@@ -1486,7 +1537,7 @@ export class StatGenUi extends BaseComponent {
 
 	_derived_renderSkills (disp, d) {
 		if (!d.cls) {
-			disp.vee.html(`<div class="ve-small ve-muted">Seleziona una classe per vedere le abilità.</div>`);
+			disp.vee.html(`<div class="ve-small ve-muted">Choose a class to see skills.</div>`);
 			return;
 		}
 
@@ -1499,7 +1550,7 @@ export class StatGenUi extends BaseComponent {
 			</label></td>
 		</tr>`).join("");
 
-		disp.vee.html(`<div class="ve-mb-1"><b>Abilità</b> <span class="ve-muted ve-small">(${d.chosenSkills.length}/${d.chooseCap} da scegliere)</span></div>
+		disp.vee.html(`<div class="ve-mb-1"><b>Skills</b> <span class="ve-muted ve-small">(${d.chosenSkills.length}/${d.chooseCap} chosen)</span></div>
 			<table class="ve-table ve-small">
 				<tbody>${skillsHtml}</tbody>
 			</table>`);
@@ -1511,11 +1562,11 @@ export class StatGenUi extends BaseComponent {
 			return;
 		}
 		if (!d.classSpells) {
-			disp.vee.html(`<div class="ve-small ve-muted">Nessun elenco incantesimi disponibile per ${d.cls.name} (livello 1).</div>`);
+			disp.vee.html(`<div class="ve-small ve-muted">No spell list available for ${d.cls.name} (level 1).</div>`);
 			return;
 		}
 		if (!d.cantripCap && !d.spellCap) {
-			disp.vee.html(`<div class="ve-small ve-muted">La classe non concede incantesimi a livello 1.</div>`);
+			disp.vee.html(`<div class="ve-small ve-muted">This class has no spells at level 1.</div>`);
 			return;
 		}
 
@@ -1536,19 +1587,19 @@ export class StatGenUi extends BaseComponent {
 			</div>`;
 		};
 
-		disp.vee.html(`<div class="ve-mb-1"><b>Incantesimi</b> <span class="ve-muted ve-small">(lancio magie: ${Parser.attAbvToFull(d.cls.spellcastingAbility)})</span></div>
+		disp.vee.html(`<div class="ve-mb-1"><b>Spells</b> <span class="ve-muted ve-small">(spellcasting: ${Parser.attAbvToFull(d.cls.spellcastingAbility)})</span></div>
 			<div class="ve-flex ve-w-100">
-				${renderList("Incantesimi noti", d.cantripCap, d.classSpells.cantrips, "common_ixSpellsCantrips")}
-				${renderList("Incantesimi di 1° livello", d.spellCap, d.classSpells.lvl1, "common_ixSpellsLvl1")}
+				${renderList("Cantrips", d.cantripCap, d.classSpells.cantrips, "common_ixSpellsCantrips")}
+				${renderList("1st-level spells", d.spellCap, d.classSpells.lvl1, "common_ixSpellsLvl1")}
 			</div>`);
 	}
 
 	_wizard_renderSummary (disp) {
 		const text = this.getSheetText();
 		const esc = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-		disp.vee.html(`<div class="ve-mb-1"><b>Scheda del personaggio</b></div>
+		disp.vee.html(`<div class="ve-mb-1"><b>Character sheet</b></div>
 			<pre style="white-space: pre-wrap;" class="ve-small ve-mb-1">${esc}</pre>
-			<div class="ve-small ve-muted">Per esportare usa i pulsanti in alto: <b>Copia Scheda</b> o <b>Scarica Scheda (JSON)</b>.</div>`);
+			<div class="ve-small ve-muted">Use the buttons above to copy or download the character sheet (JSON).</div>`);
 	}
 
 	getSheetText () {
@@ -1556,31 +1607,31 @@ export class StatGenUi extends BaseComponent {
 		const abFull = ab => Parser.attAbvToFull(ab);
 		const fmt = n => `${n >= 0 ? "+" : ""}${n}`;
 
-		const lines = [`Nome: ${this._state.common_characterName || "—"}`];
-		if (this.race) lines.push(`Razza: ${this.race.name}`);
-		if (this.background) lines.push(`Sfondo: ${this.background.name}`);
-		if (d.cls) lines.push(`Classe: ${d.cls.name}${d.sc ? ` (${d.sc.name})` : ""}`);
+		const lines = [`Name: ${this._state.common_characterName || "—"}`];
+		if (this.race) lines.push(`Species: ${this.race.name}`);
+		if (this.background) lines.push(`Background: ${this.background.name}`);
+		if (d.cls) lines.push(`Class: ${d.cls.name}${d.sc ? ` (${d.sc.name})` : ""}`);
 
 		if (d.isReady) {
 			lines.push("");
-			lines.push("Caratteristiche:");
+			lines.push("Ability scores:");
 			Parser.ABIL_ABVS.forEach(ab => lines.push(`${abFull(ab)}: ${this._state[`common_export_${ab}`] ?? 0} (${fmt(d.mods[ab])})`));
 			lines.push("");
-			lines.push(`Punti vita: ${d.hp}`);
-			lines.push(`Classe armatura: ${d.ac} (senza armatura)`);
-			lines.push("Salvaguardie:");
-			d.saves.forEach(s => lines.push(`${abFull(s.ab)}: ${fmt(s.total)}${s.prof ? " (competente)" : ""}`));
+			lines.push(`Hit points: ${d.hp}`);
+			lines.push(`Armor class: ${d.ac} (unarmored)`);
+			lines.push("Saving throws:");
+			d.saves.forEach(s => lines.push(`${abFull(s.ab)}: ${fmt(s.total)}${s.prof ? " (proficient)" : ""}`));
 			const profSkills = d.skills.filter(s => s.isFixed || s.isChosen);
-			lines.push("Abilità:");
+			lines.push("Skills:");
 			if (!profSkills.length) lines.push("—");
-			profSkills.forEach(s => lines.push(`${s.name}: ${fmt(s.mod + 2)} (competente)`));
+			profSkills.forEach(s => lines.push(`${s.name}: ${fmt(s.mod + 2)} (proficient)`));
 			if (d.classSpells) {
 				lines.push("");
-				lines.push(`Lancio magie (${abFull(d.cls.spellcastingAbility)}):`);
+				lines.push(`Spellcasting (${abFull(d.cls.spellcastingAbility)}):`);
 				const cantrips = this._state.common_ixSpellsCantrips || [];
 				const lvl1 = this._state.common_ixSpellsLvl1 || [];
-				lines.push(`Incantesimi noti: ${cantrips.length ? cantrips.join(", ") : "—"}`);
-				lines.push(`Incantesimi di 1° livello: ${lvl1.length ? lvl1.join(", ") : "—"}`);
+				lines.push(`Cantrips: ${cantrips.length ? cantrips.join(", ") : "—"}`);
+				lines.push(`1st-level spells: ${lvl1.length ? lvl1.join(", ") : "—"}`);
 			}
 		}
 		return lines.join("\n");
@@ -1599,8 +1650,7 @@ export class StatGenUi extends BaseComponent {
 		if (this.background) values["Background"] = this.background.name;
 		values["XP"] = "0";
 		values["ProfBonus"] = "+2";
-		// Scheda italiana 2014: velocita' in metri (30 ft = 9 m)
-		values["Speed"] = `${Math.round((this.race?.speed ?? 30) / 3.2808)} m`;
+		values["Speed"] = `${this.race?.speed ?? 30}`;
 
 		if (d.isReady) {
 			values["AC"] = `${d.ac}`;
@@ -1617,35 +1667,35 @@ export class StatGenUi extends BaseComponent {
 			}
 			Parser.ABIL_ABVS.forEach(ab => {
 				values[ab.toUpperCase()] = `${st[`common_export_${ab}`]}`;
-				values[`${ab.toUpperCase()}mod`] = fmt(d.mods[ab]);
+				values[({dex: "DEXmod ", cha: "CHamod"})[ab] || `${ab.toUpperCase()}mod`] = fmt(d.mods[ab]);
 			});
 			const saveIds = {str: "ST Strength", dex: "ST Dexterity", con: "ST Constitution", int: "ST Intelligence", wis: "ST Wisdom", cha: "ST Charisma"};
 			d.saves.forEach(s => {
 				values[saveIds[s.ab]] = fmt(s.total);
-				if (s.prof) checks.push(`${s.ab.toUpperCase()}prof`);
+				if (s.prof) checks.push(({str: "Check Box 11", dex: "Check Box 18", con: "Check Box 19", int: "Check Box 20", wis: "Check Box 21", cha: "Check Box 22"})[s.ab]);
 			});
 			const skillIds = {
-				"acrobatics": "ACRO", "animal handling": "ANIM", "arcana": "ARC", "athletics": "ATH",
-				"deception": "DEC", "history": "HIST", "insight": "INS", "intimidation": "INTI",
-				"investigation": "INV", "medicine": "MED", "nature": "NAT", "perception": "PERC",
-				"performance": "PERF", "persuasion": "PERS", "religion": "REL", "sleight of hand": "SLE",
-				"stealth": "STLTH", "survival": "SURV",
+				"acrobatics": "Acrobatics", "animal handling": "Animal", "arcana": "Arcana", "athletics": "Athletics",
+				"deception": "Deception ", "history": "History ", "insight": "Insight", "intimidation": "Intimidation",
+				"investigation": "Investigation ", "medicine": "Medicine", "nature": "Nature", "perception": "Perception ",
+				"performance": "Performance", "persuasion": "Persuasion", "religion": "Religion", "sleight of hand": "SleightofHand",
+				"stealth": "Stealth ", "survival": "Survival",
 			};
 			d.skills.forEach(sk => {
 				const id = skillIds[sk.key];
 				if (!id) return;
 				const prof = sk.isFixed || sk.isChosen;
 				values[id] = fmt((sk.mod ?? 0) + (prof ? 2 : 0));
-				if (prof) checks.push(`${id}P`);
+				if (prof) checks.push(`Check Box ${23 + Object.keys(skillIds).indexOf(sk.key)}`);
 			});
 			if (d.classSpells && d.cls.spellcastingAbility) {
 				const mod = d.mods[d.cls.spellcastingAbility];
 				values["Spellcasting Class 2"] = `${d.cls.name} 1`;
-				// Pagina 3 usa le abbreviazioni (es. "INT +4")
+				// Page 3 uses ability abbreviations (e.g. "INT +4").
 				values["SpellcastingAbility 2"] = `${d.cls.spellcastingAbility.toUpperCase()} ${fmt(mod)}`;
 				values["SpellSaveDC  2"] = `${10 + mod}`;
 				values["SpellAtkBonus 2"] = fmt(2 + mod);
-				// Slot 2014 livello 1: 2 slot di 1° livello (PHB + Artificer TCE); "SlotsRemaining" = slot SPESI
+				// "SlotsRemaining" is labeled "slots expended" in the English template.
 				values["SlotsTotal 19"] = "2";
 				values["SlotsRemaining 19"] = "0";
 				for (let lv = 2; lv <= 9; lv++) {
@@ -1655,7 +1705,7 @@ export class StatGenUi extends BaseComponent {
 			}
 		}
 
-		// Suffissi [R]/[C] (rituale/concentrazione) nel formato della scheda di riferimento: "Nome [R,C]"
+		// Mark ritual and concentration spells with [R] and [C].
 		const spellDb = this.klass ? (this._classSpells[this.klass.name] || {cantrips: [], lvl1: []}) : {cantrips: [], lvl1: []};
 		const spellFlags = new Map([...spellDb.cantrips, ...spellDb.lvl1].map(sp => [String(sp.name).toLowerCase(), sp]));
 		const spellLabel = nm => {
@@ -1674,30 +1724,31 @@ export class StatGenUi extends BaseComponent {
 
 	async _wizard_renderOfficialSheet (disp) {
 		const tok = (this._sheetTok = (this._sheetTok ?? 0) + 1);
-		disp.vee.html(`<div class="ve-small ve-muted">Caricamento della scheda ufficiale…</div>`);
+		disp.vee.html(`<div class="ve-small ve-muted">Loading the official character sheet…</div>`);
 		try {
 			const pdfLib = window.PDFLib;
-			if (!pdfLib) throw new Error("pdf-lib non caricata");
+			if (!pdfLib) throw new Error("pdf-lib is unavailable");
 			const {values, checks, spells} = this._wizard_fillSheetFields();
 			const res = await fetch(`${Renderer.get().baseUrl}scheda-personaggio.pdf`);
-			if (!res.ok) throw new Error(`PDF non trovato (HTTP ${res.status})`);
-			const pdfDoc = await pdfLib.PDFDocument.load(await res.arrayBuffer());
+			if (!res.ok) throw new Error(`PDF not found (HTTP ${res.status})`);
+			// Fastest: the default Slow parse yields via setTimeout per object batch, which Chrome background-tab timer throttling can stall for minutes
+			const pdfDoc = await pdfLib.PDFDocument.load(await res.arrayBuffer(), {parseSpeed: pdfLib.ParseSpeeds.Fastest});
 			const form = pdfDoc.getForm();
 			const setField = (id, val) => {
 				try {
 					const f = form.getField(id);
 					if (f instanceof pdfLib.PDFTextField) f.setText(val);
-				} catch (e) { /* campo non presente nel modello */ }
+				} catch (e) { /* Field not present in the template. */ }
 			};
 			const checkBox = id => {
-				try { form.getCheckBox(id).check(); } catch (e) { /* casella non presente */ }
+				try { form.getCheckBox(id).check(); } catch (e) { /* Checkbox not present. */ }
 			};
 			Object.entries(values).forEach(([id, val]) => setField(id, val));
 			checks.forEach(checkBox);
-			// Righe incantesimi pagina 3 (geometria verificata del modello: trucchetti y 500-630, 1° livello y 260-455)
+			// Page 3 spell rows: cantrips y 500-630, 1st-level spells y 260-455.
 			const CANTRIP_ROWS = ["Spells 1014", "Spells 1016", "Spells 1017", "Spells 1018", "Spells 1019", "Spells 1020", "Spells 1021", "Spells 1022"];
 			const LVL1_ROWS = [
-				["Spells 101014", "Check Box 2510"], ["Spells 1015", "Check Box 251"], ["Spells 1023", "Check Box 309"],
+				["Spells 1015", "Check Box 251"], ["Spells 1023", "Check Box 309"],
 				["Spells 1024", "Check Box 3010"], ["Spells 1025", "Check Box 3011"], ["Spells 1026", "Check Box 3012"],
 				["Spells 1027", "Check Box 3013"], ["Spells 1028", "Check Box 3014"], ["Spells 1029", "Check Box 3015"],
 				["Spells 1030", "Check Box 3016"], ["Spells 1031", "Check Box 3017"], ["Spells 1032", "Check Box 3018"],
@@ -1708,19 +1759,20 @@ export class StatGenUi extends BaseComponent {
 				setField(LVL1_ROWS[i][0], n);
 				checkBox(LVL1_ROWS[i][1]);
 			});
-			const outBytes = await pdfDoc.save();
+			// Infinity: the default (50) yields via setTimeout per object batch, which Chrome background-tab timer throttling can stall for minutes
+			const outBytes = await pdfDoc.save({objectsPerTick: Infinity});
 			if (tok !== this._sheetTok) return;
 			if (this._sheetBlobUrl) URL.revokeObjectURL(this._sheetBlobUrl);
 			this._sheetBlobUrl = URL.createObjectURL(new Blob([outBytes], {type: "application/pdf"}));
 			disp.vee.html(`<div class="ve-flex-col ve-w-100">
-				<div class="ve-small ve-muted ve-mb-2">Scheda ufficiale compilata con i dati del personaggio. Le caselle narrative (personalità, equipaggiamento, retroscena) vanno completate a mano.</div>
-				<a class="ve-btn ve-btn-default ve-mb-2" href="${this._sheetBlobUrl}" download="scheda-personaggio.pdf">Scarica la scheda PDF</a>
+				<div class="ve-small ve-muted ve-mb-2">Official sheet filled with character data. Complete the narrative fields (personality, equipment, backstory) manually.</div>
+				<a class="ve-btn ve-btn-default ve-mb-2" href="${this._sheetBlobUrl}" download="character-sheet.pdf">Download character sheet (PDF)</a>
 				<iframe src="${this._sheetBlobUrl}" style="width:100%;height:800px;border:1px solid #ccc;"></iframe>
 			</div>`);
 		} catch (err) {
 			if (tok !== this._sheetTok) return;
 			const msg = String(err?.message ?? err).replace(/</g, "&lt;");
-			disp.vee.html(`<div class="ve-small ve-muted">Scheda ufficiale non disponibile: ${msg}. La scheda in testo resta disponibile al passo 7.</div>`);
+			disp.vee.html(`<div class="ve-small ve-muted">Official sheet unavailable: ${msg}. The text summary remains available at step 7.</div>`);
 		}
 	}
 
@@ -2275,6 +2327,7 @@ export class StatGenUi extends BaseComponent {
 			common_ixSubclass: null,
 
 			common_characterName: "",
+			common_companionId: null,
 			common_wizardStep: 1,
 			common_srcExcl: [],
 			common_ixSkillsChosen: [],

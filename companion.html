@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Character Companion - 5etools</title>
+	<link rel="stylesheet" href="css/bootstrap.css">
+	<link rel="stylesheet" href="css/main.css">
+	<style>
+		.companion {max-width: 1100px; margin: auto; padding: 1rem;}
+		.companion header, .companion .row-actions {display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; justify-content: space-between;}
+		.companion section {margin: 1.5rem 0; padding: 1rem; border: 1px solid currentColor;}
+		.companion .grid {display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 1rem;}
+		.companion label {display: inline-flex; gap: .35rem; align-items: center; margin: .3rem .5rem .3rem 0;}
+		.companion textarea {display: block; width: 100%; min-height: 6rem;}
+		.companion button, .companion input[type="file"] {min-height: 44px; cursor: pointer;}
+		.companion button:disabled {cursor: not-allowed;}
+		.companion button:focus-visible, .companion a:focus-visible, .companion input:focus-visible, .companion select:focus-visible, .companion textarea:focus-visible {outline: 3px solid #006bc4; outline-offset: 2px;}
+	</style>
+</head>
+<body>
+	<main class="companion">
+		<header><h1>Character Companion</h1><nav aria-label="Navigation"><a href="charGen.html">Create a Character</a> · <a href="index.html">5etools</a></nav></header>
+		<p id="status" role="status" aria-live="polite">Loading characters…</p>
+		<div id="companion-app"></div>
+	</main>
+	<script defer src="lib/pdf-lib.min.js"></script>
+	<script type="module" src="js/statgen/companion-page.js"></script>
+</body>
+</html>

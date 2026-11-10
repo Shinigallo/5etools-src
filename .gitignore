@@ -10,6 +10,7 @@ img
 .vscode/
 
 # Misc dev/scripting files
+.claude/
 trash/
 trash_in/
 node_/
